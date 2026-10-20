@@ -62,7 +62,8 @@ async def login_submit(
             value=res.session.access_token,
             httponly=True,
             max_age=3600 * 24 * 7,
-            samesite="lax"
+            samesite="lax",
+            secure=True
         )
         return response
 
@@ -115,7 +116,8 @@ async def register_submit(
                 value=res.session.access_token,
                 httponly=True,
                 max_age=3600 * 24 * 7,
-                samesite="lax"
+                samesite="lax",
+                secure=True
             )
             return response
         else:
@@ -131,7 +133,8 @@ async def register_submit(
                     value=login_res.session.access_token,
                     httponly=True,
                     max_age=3600 * 24 * 7,
-                    samesite="lax"
+                    samesite="lax",
+                    secure=True
                 )
             return response
 
