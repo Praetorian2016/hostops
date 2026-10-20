@@ -2,12 +2,13 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
 from app.models import init_db
 from app.routers import checkin, dashboard, calendar_view, receipts, auth
+from app.routers.auth import templates
 from app.services.calendar_sync import sync_external_ical_feeds
 
 # Intervallo in secondi per eventuale worker standalone
@@ -75,5 +76,5 @@ async def trigger_ical_sync():
 
 # O "/dashboard", a seconda del tuo flusso
 @app.get("/")
-async def root():
-    return RedirectResponse(url="/login") 
+async def root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
