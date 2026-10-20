@@ -1,56 +1,97 @@
+import os
 from pathlib import Path
 from datetime import date
-from fastapi import APIRouter, Request, HTTPException
-from fastapi.responses import HTMLResponse, Response
+from fastapi import APIRouter, Request, HTTPException, status
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from app.models import get_db_connection
-from app.services.alloggiati_web import export_booking_to_txt
+from app.supabase_client import supabase_admin
 from app.services.tourist_tax import calculate_tourist_tax
 
-router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+# Percorsi robusti per i template su Vercel e in locale
+BASE_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = BASE_DIR.parent
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+search_paths = [
+    str(BASE_DIR / "templates"),
+    str(ROOT_DIR / "templates"),
+    "/var/task/app/templates",
+    "/var/task/templates",
+]
+valid_paths = [p for p in search_paths if os.path.exists(p)] or [str(BASE_DIR / "templates")]
+templates = Jinja2Templates(directory=valid_paths)
+
+router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
 @router.get("", response_class=HTMLResponse)
 async def view_dashboard(request: Request):
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    token = request.cookies.get("access_token")
+    if not token:
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
-    bookings_query = """
-        SELECT 
-            b.id,
-            b.guest_name,
-            b.channel,
-            b.check_in,
-            b.check_out,
-            b.nights,
-            b.guests_count,
-            COALESCE(b.gross_revenue, 0.0) AS gross_revenue,
-            COALESCE(b.ota_commission, 0.0) AS ota_commission,
-            COALESCE(b.cleaning_cost, 0.0) AS cleaning_cost,
-            COALESCE(b.linen_kit_cost, 0.0) AS linen_kit_cost,
-            COALESCE(b.utilities_est, 0.0) AS utilities_est,
-            (COALESCE(b.gross_revenue, 0.0) - COALESCE(b.ota_commission, 0.0) - COALESCE(b.cleaning_cost, 0.0) - COALESCE(b.linen_kit_cost, 0.0) - COALESCE(b.utilities_est, 0.0)) AS calculated_net_profit,
-            COUNT(g.id) AS registered_guests_count
-        FROM bookings b
-        LEFT JOIN guests g ON b.id = g.booking_id
-        GROUP BY b.id
-        ORDER BY b.check_in DESC
-    """
-    cursor.execute(bookings_query)
-    raw_bookings = [dict(row) for row in cursor.fetchall()]
+    try:
+        user_res = supabase_admin.auth.get_user(token)
+        user_id = user_res.user.id
+    except Exception:
+        # Se il token è scaduto o non valido, rimanda al login
+        response = RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+        response.delete_cookie(key="access_token")
+        return response
 
-    # Calcolo della Tourist Tax per ciascuna prenotazione
+    # 1. Recupera la struttura associata all'utente
+    prop_res = supabase_admin.table("properties").select("*").eq("user_id", user_id).execute()
+    properties = prop_res.data or []
+
+    if not properties:
+        return RedirectResponse(url="/properties/new", status_code=status.HTTP_303_SEE_OTHER)
+
+    current_property = properties[0]
+    property_id = current_property.get("id")
+
+    # 2. Recupera prenotazioni della struttura da Supabase
+    try:
+        bookings_res = (
+            supabase_admin.table("bookings")
+            .select("*")
+            .eq("property_id", property_id)
+            .order("check_in", desc=True)
+            .execute()
+        )
+        raw_bookings = bookings_res.data or []
+    except Exception:
+        raw_bookings = []
+
+    # 3. Elaborazione prenotazioni e imposte
     bookings = []
     total_tourist_tax = 0.0
 
     for b in raw_bookings:
-        tax_info = calculate_tourist_tax(b["nights"], b["guests_count"])
-        b["tourist_tax"] = tax_info["total_tax"]
-        total_tourist_tax += tax_info["total_tax"]
+        nights = b.get("nights", 1) or 1
+        guests_count = b.get("guests_count", 1) or 1
+        
+        try:
+            tax_info = calculate_tourist_tax(nights, guests_count)
+            tax_amount = tax_info.get("total_tax", 0.0)
+        except Exception:
+            tax_amount = min(nights, 10) * guests_count * float(current_property.get("tax_rate", 6.0))
+
+        b["tourist_tax"] = tax_amount
+        total_tourist_tax += tax_amount
+
+        # Coalesce dei valori finanziari
+        gross = float(b.get("gross_revenue") or 0.0)
+        ota = float(b.get("ota_commission") or 0.0)
+        cleaning = float(b.get("cleaning_cost") or 0.0)
+        linen = float(b.get("linen_kit_cost") or 0.0)
+        utilities = float(b.get("utilities_est") or 0.0)
+        
+        b["gross_revenue"] = gross
+        b["ota_commission"] = ota
+        b["cleaning_cost"] = cleaning
+        b["linen_kit_cost"] = linen
+        b["utilities_est"] = utilities
+        b["calculated_net_profit"] = gross - ota - cleaning - linen - utilities
         bookings.append(b)
 
     totals = {
@@ -63,83 +104,53 @@ async def view_dashboard(request: Request):
         "total_tourist_tax": total_tourist_tax,
     }
 
-    guests_query = """
-        SELECT 
-            g.*, 
-            b.guest_name AS booking_guest_name
-        FROM guests g
-        JOIN bookings b ON g.booking_id = b.id
-        ORDER BY g.id DESC
-    """
-    cursor.execute(guests_query)
-    guests = [dict(row) for row in cursor.fetchall()]
-    conn.close()
+    # 4. Recupera ospiti da Supabase
+    try:
+        guests_res = (
+            supabase_admin.table("guests")
+            .select("*, bookings(guest_name)")
+            .order("id", desc=True)
+            .execute()
+        )
+        guests = guests_res.data or []
+    except Exception:
+        guests = []
 
     context = {
         "request": request,
+        "property": current_property,
+        "properties": properties,
         "bookings": bookings,
         "totals": totals,
         "guests": guests,
     }
 
-    return templates.TemplateResponse(request, "dashboard.html", context)
-
-
-@router.get("/download-alloggiati/{booking_id}")
-async def download_alloggiati(booking_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM bookings WHERE id = ?", (booking_id,))
-    booking_row = cursor.fetchone()
-    if not booking_row:
-        conn.close()
-        raise HTTPException(status_code=404, detail="Prenotazione non trovata.")
-
-    cursor.execute("SELECT * FROM guests WHERE booking_id = ? ORDER BY guest_type ASC", (booking_id,))
-    guest_rows = cursor.fetchall()
-
-    if not guest_rows:
-        conn.close()
-        raise HTTPException(status_code=400, detail="Nessun ospite registrato per questa prenotazione.")
-
-    booking_dict = dict(booking_row)
-    guests_list = [dict(g) for g in guest_rows]
-
-    txt_content = export_booking_to_txt(booking_dict, guests_list)
-
-    cursor.execute("UPDATE guests SET alloggiati_status = 'GENERATED' WHERE booking_id = ?", (booking_id,))
-    conn.commit()
-    conn.close()
-
-    filename = f"alloggiati_booking_{booking_id}.txt"
-    return Response(
-        content=txt_content,
-        media_type="text/plain; charset=windows-1252",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard.html",
+        context=context
     )
+
 
 @router.get("/receipt/tourist-tax/{booking_id}")
 async def generate_tourist_tax_receipt(booking_id: int, request: Request):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT * FROM bookings WHERE id = ?", (booking_id,))
-    booking = cursor.fetchone()
-    conn.close()
+    token = request.cookies.get("access_token")
+    if not token:
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
-    if not booking:
+    booking_res = supabase_admin.table("bookings").select("*").eq("id", booking_id).execute()
+    if not booking_res.data:
         raise HTTPException(status_code=404, detail="Prenotazione non trovata")
 
-# Conversione da sqlite3.Row a dizionario nativo
-    booking = dict(booking)
+    booking = booking_res.data[0]
+    nights = booking.get("nights", 1)
+    guests_count = booking.get("guests_count", 1)
 
-    # Calcolo imposta (Roma: 6€ per ospite a notte, max 10 notti)
-    effective_nights = min(booking["nights"], 10)
-    tax_total = booking["guests_count"] * effective_nights * 6.0
+    effective_nights = min(nights, 10)
+    tax_total = guests_count * effective_nights * 6.0
 
     today_str = date.today().strftime("%d/%m/%Y")
-    receipt_year = str(booking["check_in"])[:4]
+    receipt_year = str(booking.get("check_in", ""))[:4]
 
     return templates.TemplateResponse(
         request=request,
