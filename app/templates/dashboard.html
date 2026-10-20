@@ -135,6 +135,28 @@
             background-color: rgba(255, 255, 255, 0.04);
         }
 
+        .btn-alloggiati {
+            background: rgba(59, 130, 246, 0.12);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: #93c5fd;
+        }
+
+        .btn-alloggiati:hover {
+            background: rgba(59, 130, 246, 0.22);
+            color: #ffffff;
+        }
+
+        .btn-ross1000 {
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #6ee7b7;
+        }
+
+        .btn-ross1000:hover {
+            background: rgba(16, 185, 129, 0.22);
+            color: #ffffff;
+        }
+
         main {
             max-width: 1300px;
             width: 100%;
@@ -144,10 +166,15 @@
         }
 
         .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
             margin-bottom: 28px;
+            flex-wrap: wrap;
+            gap: 16px;
         }
 
-        .page-header h1 {
+        .header-title h1 {
             font-size: 1.8rem;
             font-weight: 800;
             color: #ffffff;
@@ -155,9 +182,16 @@
             margin-bottom: 4px;
         }
 
-        .page-header p {
+        .header-title p {
             font-size: 0.92rem;
             color: var(--text-muted);
+        }
+
+        .export-actions-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
         }
 
         .metrics-grid {
@@ -212,6 +246,8 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 12px;
         }
 
         .panel-header h2 {
@@ -306,8 +342,27 @@
 
     <main>
         <div class="page-header">
-            <h1>Panoramica Operativa &amp; P&amp;L</h1>
-            <p>Monitoraggio prenotazioni, calcolo imposta di soggiorno e marginalit&#224; netta</p>
+            <div class="header-title">
+                <h1>Panoramica Operativa &amp; P&amp;L</h1>
+                <p>Monitoraggio prenotazioni, calcolo imposta di soggiorno e marginalit&#224; netta</p>
+            </div>
+            {% if property %}
+            <div class="export-actions-bar">
+                <!-- Export Alloggiati Web (Data di oggi) -->
+                <a href="/dashboard/export/alloggiati-web?property_id={{ property.id }}&target_date={{ today_date }}" 
+                   class="btn btn-alloggiati"
+                   title="Scarica il file .txt conforme per la Polizia di Stato per gli arrivi odierni">
+                    &#128196; Alloggiati Web (.txt)
+                </a>
+
+                <!-- Export ROSS 1000 Lazio (Mese in corso) -->
+                <a href="/dashboard/export/ross1000?property_id={{ property.id }}&start_date={{ today_date[:7] }}-01&end_date={{ today_date }}" 
+                   class="btn btn-ross1000"
+                   title="Scarica il file .csv dei movimenti per ROSS 1000 Lazio / ISTAT">
+                    &#128202; ROSS 1000 Lazio (.csv)
+                </a>
+            </div>
+            {% endif %}
         </div>
 
         <div class="metrics-grid">
@@ -379,7 +434,10 @@
                                 <td>-&euro; {{ "%.2f"|format(b.cleaning_cost + b.linen_kit_cost + b.utilities_est) }}</td>
                                 <td class="val-positive"><strong>&euro; {{ "%.2f"|format(b.calculated_net_profit) }}</strong></td>
                                 <td>
-                                    <a href="/dashboard/receipt/tourist-tax/{{ b.id }}" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.78rem;">Ricevuta</a>
+                                    <div style="display: flex; gap: 6px; align-items: center;">
+                                        <a href="/dashboard/receipt/tourist-tax/{{ b.id }}" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.78rem;">Ricevuta</a>
+                                        <a href="/dashboard/export/alloggiati-web?property_id={{ property.id }}&target_date={{ b.check_in }}" class="btn btn-alloggiati" style="padding: 4px 8px; font-size: 0.75rem;" title="Scarica .txt Alloggiati per la data di questo arrivo">&#128196; .txt</a>
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -400,6 +458,11 @@
         <div class="panel">
             <div class="panel-header">
                 <h2>Verifica Identit&#224; &amp; Ospiti (Self Check-in)</h2>
+                {% if property %}
+                <div style="display: flex; gap: 8px;">
+                    <a href="/dashboard/export/alloggiati-web?property_id={{ property.id }}&target_date={{ today_date }}" class="btn btn-outline" style="padding: 6px 12px; font-size: 0.8rem;">Scarica Alloggiati Oggi</a>
+                </div>
+                {% endif %}
             </div>
             <div class="table-wrap">
                 <table>
@@ -416,10 +479,10 @@
                             {% for g in guests %}
                             <tr>
                                 <td><strong>{{ g.first_name }} {{ g.last_name }}</strong></td>
-                                <td>{{ g.birth_date }}</td>
-                                <td>{{ g.document_type }} - {{ g.document_number }}</td>
+                                <td>{{ g.birth_date or '-' }}</td>
+                                <td>{{ g.document_type or 'DOC' }} - {{ g.document_number or '-' }}</td>
                                 <td>
-                                    <span class="channel-tag">{{ g.alloggiati_status or 'DA GENERARE' }}</span>
+                                    <span class="channel-tag">{{ g.alloggiati_status or 'PRONTO EXPORT' }}</span>
                                 </td>
                             </tr>
                             {% endfor %}
