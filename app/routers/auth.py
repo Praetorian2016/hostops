@@ -5,9 +5,25 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from app.supabase_client import supabase_admin
 
-# Risoluzione percorso assoluto alla cartella templates (compatibile con Vercel)
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+# Percorso assoluto verso app/templates
+TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+router = APIRouter()
+
+# Percorso radice e percorso interno ad app
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+APP_DIR = Path(__file__).resolve().parent.parent
+
+if (ROOT_DIR / "templates").exists():
+    TEMPLATES_DIR = ROOT_DIR / "templates"
+elif (APP_DIR / "templates").exists():
+    TEMPLATES_DIR = APP_DIR / "templates"
+else:
+    # Fallback standard per Vercel
+    TEMPLATES_DIR = Path("/var/task/templates")
+
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 router = APIRouter()
 
