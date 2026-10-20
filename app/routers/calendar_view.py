@@ -1,20 +1,30 @@
-import sqlite3
+import os
+from pathlib import Path
 from datetime import datetime, date
 from icalendar import Calendar, Event
-from fastapi import Response
-from fastapi import APIRouter, HTTPException, Request, Form
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi import APIRouter, HTTPException, Request, Form, status
+from fastapi.responses import JSONResponse, HTMLResponse, Response, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from pathlib import Path
-from app.models import get_db_connection
+
+from app.supabase_client import supabase_admin
 from app.services.calendar_sync import sync_external_ical_feeds
 
 router = APIRouter(prefix="/calendar", tags=["Calendar"])
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+# Percorsi template compatibili con Vercel e ambiente locale
+BASE_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = BASE_DIR.parent
 
-# Colori per i canali nel calendario
+search_paths = [
+    str(BASE_DIR / "templates"),
+    str(ROOT_DIR / "templates"),
+    "/var/task/app/templates",
+    "/var/task/templates",
+]
+valid_paths = [p for p in search_paths if os.path.exists(p)] or [str(BASE_DIR / "templates")]
+templates = Jinja2Templates(directory=valid_paths)
+
+# Palette per i canali nel calendario
 CHANNEL_COLORS = {
     "Airbnb": "#FF5A5F",
     "Booking.com": "#003580",
@@ -22,54 +32,100 @@ CHANNEL_COLORS = {
     "BLOCKED": "#64748b"
 }
 
+
+def _get_user_property_id(request: Request) -> tuple[str, str]:
+    """Verifica il token e recupera user_id e property_id primaria."""
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Non autenticato")
+
+    try:
+        user_res = supabase_admin.auth.get_user(token)
+        user_id = user_res.user.id
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sessione scaduta")
+
+    prop_res = supabase_admin.table("properties").select("id").eq("user_id", user_id).execute()
+    properties = prop_res.data or []
+    if not properties:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nessuna struttura associata")
+
+    return user_id, properties[0]["id"]
+
+
 @router.get("", response_class=HTMLResponse)
 async def calendar_page(request: Request):
     """Renderizza la pagina con il calendario interattivo."""
-    return templates.TemplateResponse(request, "calendar.html", {"request": request})
+    token = request.cookies.get("access_token")
+    if not token:
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+
+    try:
+        _, property_id = _get_user_property_id(request)
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+
+    prop_res = supabase_admin.table("properties").select("*").eq("id", property_id).execute()
+    current_property = prop_res.data[0] if prop_res.data else None
+
+    return templates.TemplateResponse(
+        request=request,
+        name="calendar.html",
+        context={"request": request, "property": current_property}
+    )
+
 
 @router.get("/events")
-async def get_calendar_events():
-    """Restituisce le prenotazioni e i blocchi formattati per FullCalendar."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, guest_name, channel, check_in, check_out, guests_count, gross_revenue
-        FROM bookings
-    """)
-    rows = cursor.fetchall()
-    conn.close()
+async def get_calendar_events(request: Request):
+    """Restituisce le prenotazioni e i blocchi formattati per FullCalendar da Supabase."""
+    try:
+        _, property_id = _get_user_property_id(request)
+    except HTTPException as e:
+        return JSONResponse(status_code=e.status_code, content={"error": e.detail})
+
+    res = (
+        supabase_admin.table("bookings")
+        .select("id, guest_name, channel, check_in, check_out, guests_count, gross_revenue")
+        .eq("property_id", property_id)
+        .execute()
+    )
+    rows = res.data or []
 
     events = []
     for r in rows:
-        channel = r["channel"] or "Diretto"
+        channel = r.get("channel") or "Diretto"
         color = CHANNEL_COLORS.get(channel, "#2563eb")
         is_blocked = (channel == "BLOCKED")
+        guest = r.get("guest_name") or "Ospite"
 
         events.append({
-            "id": r["id"],
-            "title": f"⛔ Blocco: {r['guest_name']}" if is_blocked else f"{r['guest_name']} ({channel})",
+            "id": str(r["id"]),
+            "title": f"⛔ Blocco: {guest}" if is_blocked else f"{guest} ({channel})",
             "start": r["check_in"],
-            "end": r["check_out"],  # In FullCalendar la data end è esclusiva, perfetta per il check-out
+            "end": r["check_out"],  # In FullCalendar end è esclusivo
             "backgroundColor": color,
             "borderColor": color,
             "allDay": True,
             "extendedProps": {
                 "channel": channel,
-                "guests_count": r["guests_count"],
-                "gross_revenue": r["gross_revenue"],
+                "guests_count": r.get("guests_count", 1),
+                "gross_revenue": r.get("gross_revenue", 0.0),
                 "is_blocked": is_blocked
             }
         })
     return JSONResponse(content=events)
 
+
 @router.post("/block-dates")
 async def block_dates(
+    request: Request,
     reason: str = Form("Manutenzione / Uso Proprietario"),
     check_in: str = Form(...),
     check_out: str = Form(...)
 ):
-    """Crea un blocco manuale date nel database."""
-    from datetime import datetime
+    """Crea un blocco manuale date su Supabase."""
+    _, property_id = _get_user_property_id(request)
+
     try:
         d1 = datetime.strptime(check_in, "%Y-%m-%d")
         d2 = datetime.strptime(check_out, "%Y-%m-%d")
@@ -79,66 +135,68 @@ async def block_dates(
     except ValueError:
         raise HTTPException(status_code=400, detail="Formato date non valido (richiesto YYYY-MM-DD).")
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO bookings (
-            guest_name, channel, check_in, check_out, nights, guests_count,
-            gross_revenue, ota_commission, cleaning_cost, linen_kit_cost, utilities_est, net_profit
-        ) VALUES (?, 'BLOCKED', ?, ?, ?, 0, 0, 0, 0, 0, 0, 0)
-    """, (reason, check_in, check_out, nights))
-    conn.commit()
-    conn.close()
+    supabase_admin.table("bookings").insert({
+        "property_id": property_id,
+        "guest_name": reason,
+        "channel": "BLOCKED",
+        "check_in": check_in,
+        "check_out": check_out,
+        "nights": nights,
+        "guests_count": 0,
+        "gross_revenue": 0.0,
+        "ota_commission": 0.0,
+        "cleaning_cost": 0.0,
+        "linen_kit_cost": 0.0,
+        "utilities_est": 0.0,
+        "net_profit": 0.0
+    }).execute()
 
     return {"status": "ok", "message": "Date bloccate con successo"}
 
+
 @router.post("/delete-entry/{entry_id}")
-async def delete_entry(entry_id: int):
-    """Elimina una prenotazione o sblocca un periodo."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM tourist_tax WHERE booking_id = ?", (entry_id,))
-    cursor.execute("DELETE FROM guests WHERE booking_id = ?", (entry_id,))
-    cursor.execute("DELETE FROM bookings WHERE id = ?", (entry_id,))
-    conn.commit()
-    conn.close()
+async def delete_entry(entry_id: str, request: Request):
+    """Elimina una prenotazione o sblocca un periodo su Supabase."""
+    _get_user_property_id(request)
+    
+    supabase_admin.table("guests").delete().eq("booking_id", entry_id).execute()
+    supabase_admin.table("bookings").delete().eq("id", entry_id).execute()
+
     return {"status": "ok", "message": "Elemento rimosso"}
+
 
 @router.post("/update-dates/{entry_id}")
 async def update_dates(
-    entry_id: int,
+    entry_id: str,
+    request: Request,
     check_in: str = Form(...),
     check_out: str = Form(...)
 ):
-    """Aggiorna le date di una prenotazione o di un blocco."""
-    from datetime import datetime
+    """Aggiorna le date di una prenotazione o blocco."""
+    _get_user_property_id(request)
+
     d1 = datetime.strptime(check_in, "%Y-%m-%d")
     d2 = datetime.strptime(check_out, "%Y-%m-%d")
     nights = (d2 - d1).days
     if nights <= 0:
         raise HTTPException(status_code=400, detail="Intervallo date non valido.")
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE bookings
-        SET check_in = ?, check_out = ?, nights = ?
-        WHERE id = ?
-    """, (check_in, check_out, nights, entry_id))
-    conn.commit()
-    conn.close()
+    supabase_admin.table("bookings").update({
+        "check_in": check_in,
+        "check_out": check_out,
+        "nights": nights
+    }).eq("id", entry_id).execute()
+
     return {"status": "ok", "message": "Date aggiornate"}
+
+
 @router.get("/export.ics")
-async def export_calendar_ics():
-    """Genera ed esporta il feed iCal conforme a RFC 5545 per le OTA."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, guest_name, channel, check_in, check_out
-        FROM bookings
-    """)
-    rows = cursor.fetchall()
-    conn.close()
+async def export_calendar_ics(request: Request):
+    """Genera ed esporta il feed iCal conforme a RFC 5545 per le OTA da Supabase."""
+    _, property_id = _get_user_property_id(request)
+
+    res = supabase_admin.table("bookings").select("id, guest_name, channel, check_in, check_out").eq("property_id", property_id).execute()
+    rows = res.data or []
 
     cal = Calendar()
     cal.add('prodid', '-//HostOps Calendar//hostops.local//IT')
@@ -147,14 +205,12 @@ async def export_calendar_ics():
 
     for r in rows:
         event = Event()
-
-        channel = r["channel"] or "Diretto"
+        channel = r.get("channel") or "Diretto"
         summary = "Non disponibile" if channel == "BLOCKED" else f"Occupato ({channel})"
 
         event.add('summary', summary)
-
-        start_date = datetime.strptime(r["check_in"], "%Y-%m-%d").date()
-        end_date = datetime.strptime(r["check_out"], "%Y-%m-%d").date()
+        start_date = datetime.strptime(r["check_in"][:10], "%Y-%m-%d").date()
+        end_date = datetime.strptime(r["check_out"][:10], "%Y-%m-%d").date()
 
         event.add('dtstart', start_date)
         event.add('dtend', end_date)
@@ -163,62 +219,19 @@ async def export_calendar_ics():
 
         cal.add_component(event)
 
-    ics_content = cal.to_ical()
-
     return Response(
-        content=ics_content,
+        content=cal.to_ical(),
         media_type="text/calendar; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="hostops_calendar.ics"'}
     )
 
+
 @router.post("/sync-now")
-async def trigger_sync():
-    """Lancia la sincronizzazione immediata di tutti i calendari esterni."""
-    imported_count = await sync_external_ical_feeds()
-    return {"status": "ok", "imported": imported_count}
-
-@router.post("/add-feed")
-async def add_feed(
-    channel_name: str = Form(...),
-    feed_url: str = Form(...)
-):
-    """Salva l'URL iCal esportato da un portale OTA."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO ical_feeds (channel_name, feed_url)
-        VALUES (?, ?)
-    """, (channel_name, feed_url))
-    conn.commit()
-    conn.close()
-    return {"status": "ok", "message": "Feed salvato con successo"}
-
-@router.get("/mock-ota.ics")
-async def mock_ota_calendar():
-    """Genera un finto feed iCal OTA per testare la sincronizzazione in locale."""
-    cal = Calendar()
-    cal.add('prodid', '-//Mock OTA Feed//Booking//IT')
-    cal.add('version', '2.0')
-
-    # Prenotazione test 1
-    ev1 = Event()
-    ev1.add('summary', 'Laura Bianchi (Booking.com Mock)')
-    ev1.add('dtstart', date(2026, 11, 3))
-    ev1.add('dtend', date(2026, 11, 7))
-    ev1.add('dtstamp', datetime.utcnow())
-    ev1.add('uid', 'mock-booking-101@booking.mock')
-    cal.add_component(ev1)
-
-    # Prenotazione test 2
-    ev2 = Event()
-    ev2.add('summary', 'Marc Dupont (Booking.com Mock)')
-    ev2.add('dtstart', date(2026, 11, 20))
-    ev2.add('dtend', date(2026, 11, 24))
-    ev2.add('dtstamp', datetime.utcnow())
-    ev2.add('uid', 'mock-booking-102@booking.mock')
-    cal.add_component(ev2)
-
-    return Response(
-        content=cal.to_ical(),
-        media_type="text/calendar; charset=utf-8"
-    )
+async def trigger_sync(request: Request):
+    """Lancia la sincronizzazione immediata dei feed esterni."""
+    _get_user_property_id(request)
+    try:
+        imported_count = await sync_external_ical_feeds()
+        return {"status": "ok", "imported": imported_count}
+    except Exception as e:
+        return {"status": "warning", "message": str(e), "imported": 0}
