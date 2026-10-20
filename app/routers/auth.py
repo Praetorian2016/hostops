@@ -5,16 +5,19 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from app.supabase_client import supabase_admin
 
-# Percorso assoluto verso app/templates
-TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+# Percorsi di ricerca per templates su Vercel e in locale
+BASE_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = BASE_DIR.parent
 
-router = APIRouter()
+search_paths = [
+    str(BASE_DIR / "templates"),
+    str(ROOT_DIR / "templates"),
+    "/var/task/app/templates",
+    "/var/task/templates",
+]
+valid_paths = [p for p in search_paths if os.path.exists(p)] or [str(BASE_DIR / "templates")]
 
-
-
-
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates = Jinja2Templates(directory=valid_paths)
 
 router = APIRouter()
 
