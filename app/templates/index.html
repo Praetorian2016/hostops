@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HostOps - La piattaforma operativa per Property Manager e Host</title>
+    <title>HostOps - Gestione Operativa Property Management</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -14,10 +14,8 @@
             --bg-card-hover: #1f2937;
             --border-color: rgba(255, 255, 255, 0.08);
             --primary: #3b82f6;
-            --primary-hover: #2563eb;
             --text-main: #f9fafb;
             --text-muted: #9ca3af;
-            --accent-glow: rgba(59, 130, 246, 0.15);
         }
 
         * {
@@ -31,16 +29,18 @@
             background-color: var(--bg-main);
             color: var(--text-main);
             line-height: 1.6;
-            overflow-x: hidden;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
-        /* Navbar */
         nav {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 20px 48px;
             max-width: 1200px;
+            width: 100%;
             margin: 0 auto;
             border-bottom: 1px solid var(--border-color);
         }
@@ -49,9 +49,6 @@
             font-size: 1.35rem;
             font-weight: 800;
             letter-spacing: -0.5px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
             color: #ffffff;
             text-decoration: none;
         }
@@ -66,7 +63,6 @@
             gap: 16px;
         }
 
-        /* Buttons */
         .btn {
             display: inline-flex;
             align-items: center;
@@ -89,35 +85,35 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            background-color: var(--primary);
             color: #ffffff;
-            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .btn-primary:hover {
+            background-color: #2563eb;
             transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45);
         }
 
         .btn-secondary {
-            background: rgba(255, 255, 255, 0.05);
+            background-color: rgba(255, 255, 255, 0.05);
             color: #ffffff;
             border: 1px solid var(--border-color);
         }
 
         .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.08);
-            border-color: rgba(255, 255, 255, 0.2);
+            background-color: rgba(255, 255, 255, 0.08);
         }
 
-        /* Hero Section */
+        main {
+            flex: 1;
+        }
+
         .hero {
             max-width: 960px;
             margin: 0 auto;
-            padding: 100px 24px 70px;
+            padding: 90px 24px 60px;
             text-align: center;
-            position: relative;
         }
 
         .badge {
@@ -126,7 +122,7 @@
             gap: 8px;
             padding: 6px 14px;
             border-radius: 9999px;
-            background: rgba(59, 130, 246, 0.1);
+            background-color: rgba(59, 130, 246, 0.1);
             border: 1px solid rgba(59, 130, 246, 0.25);
             color: #93c5fd;
             font-size: 0.85rem;
@@ -139,22 +135,19 @@
             height: 8px;
             background-color: #3b82f6;
             border-radius: 50%;
-            box-shadow: 0 0 8px #3b82f6;
         }
 
         .hero h1 {
-            font-size: 3.4rem;
+            font-size: 3.2rem;
             font-weight: 800;
             line-height: 1.15;
-            letter-spacing: -1.2px;
+            letter-spacing: -1px;
             margin-bottom: 24px;
-            background: linear-gradient(180deg, #ffffff 40%, #94a3b8 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: #ffffff;
         }
 
         .hero p {
-            font-size: 1.2rem;
+            font-size: 1.15rem;
             color: var(--text-muted);
             max-width: 660px;
             margin: 0 auto 40px;
@@ -172,64 +165,54 @@
             font-size: 1rem;
         }
 
-        /* Features Section */
         .features {
             max-width: 1200px;
-            margin: 40px auto 100px;
+            margin: 20px auto 80px;
             padding: 0 24px;
         }
 
         .features-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 24px;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
         }
 
         .feature-card {
             background-color: var(--bg-card);
             border: 1px solid var(--border-color);
-            border-radius: 16px;
-            padding: 32px 24px;
-            transition: all 0.25s ease;
+            border-radius: 12px;
+            padding: 28px 24px;
+            transition: all 0.2s ease;
         }
 
         .feature-card:hover {
             border-color: rgba(59, 130, 246, 0.4);
-            transform: translateY(-4px);
+            transform: translateY(-3px);
             background-color: var(--bg-card-hover);
         }
 
         .feature-icon {
-            width: 44px;
-            height: 44px;
-            background: rgba(59, 130, 246, 0.12);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #60a5fa;
-            font-size: 1.25rem;
-            margin-bottom: 20px;
+            font-size: 1.6rem;
+            margin-bottom: 16px;
+            display: block;
         }
 
         .feature-card h3 {
-            font-size: 1.15rem;
+            font-size: 1.1rem;
             font-weight: 700;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             color: #ffffff;
         }
 
         .feature-card p {
-            font-size: 0.92rem;
+            font-size: 0.9rem;
             color: var(--text-muted);
-            line-height: 1.55;
+            line-height: 1.5;
         }
 
-        /* Footer */
         footer {
             border-top: 1px solid var(--border-color);
-            padding: 32px 24px;
+            padding: 28px 24px;
             text-align: center;
             color: #64748b;
             font-size: 0.88rem;
@@ -240,79 +223,69 @@
                 padding: 16px 20px;
             }
             .hero {
-                padding: 60px 16px 50px;
+                padding: 50px 16px 40px;
             }
             .hero h1 {
-                font-size: 2.3rem;
-            }
-            .hero p {
-                font-size: 1rem;
+                font-size: 2.2rem;
             }
         }
     </style>
 </head>
 <body>
 
-    <!-- Navigazione -->
     <nav>
-        <a href="/" class="logo">
-            Host<span>Ops</span>
-        </a>
+        <a href="/" class="logo">Host<span>Ops</span></a>
         <div class="nav-links">
             <a href="/login" class="btn btn-text">Accedi</a>
             <a href="/register" class="btn btn-primary">Registrati</a>
         </div>
     </nav>
 
-    <!-- Sezione Principale (Hero) -->
     <main>
         <section class="hero">
             <div class="badge">
                 <span class="badge-dot"></span>
                 <span>Piattaforma Operativa per Property Management</span>
             </div>
-            <h1>Automatizza la gestione delle tue proprietà senza complessità</h1>
-            <p>Sincronizzazione in tempo reale dei calendari, gestione flussi di check-in, emissione ricevute e tracciamento delle spese in un unico spazio di lavoro centralizzato.</p>
-            
+            <h1>Semplifica e automatizza la gestione delle tue proprietà</h1>
+            <p>Sincronizzazione calendari iCal, registrazione check-in, emissione ricevute e tracciamento spese in un unico spazio di lavoro centralizzato.</p>
             <div class="hero-actions">
                 <a href="/login" class="btn btn-primary">Accedi al gestionale</a>
                 <a href="/register" class="btn btn-secondary">Crea nuovo account</a>
             </div>
         </section>
 
-        <!-- Schede Funzionalità Operative -->
         <section class="features">
             <div class="features-grid">
                 <div class="feature-card">
-                    <div class="feature-icon">📅</div>
+                    <span class="feature-icon">&#128197;</span>
                     <h3>Sincronizzazione Calendari</h3>
-                    <p>Aggiornamento e allineamento continuo dei feed iCal (Airbnb, Booking, Vrbo) per prevenire overbooking e ritardi.</p>
+                    <p>Collegamento continuo dei feed iCal (Airbnb, Booking, Vrbo) per prevenire conflitti e overbooking.</p>
                 </div>
 
                 <div class="feature-card">
-                    <div class="feature-icon">🔑</div>
-                    <h3>Flussi di Check-in</h3>
-                    <p>Organizzazione trasparente degli ingressi, registrazione degli ospiti e tracciamento puntuale delle operazioni di accoglienza.</p>
+                    <span class="feature-icon">&#128273;</span>
+                    <h3>Gestione Check-in</h3>
+                    <p>Flusso semplificato per la raccolta dati degli ospiti e la registrazione degli arrivi.</p>
                 </div>
 
                 <div class="feature-card">
-                    <div class="feature-icon">🧾</div>
-                    <h3>Ricevute & Spese</h3>
-                    <p>Archiviazione, calcolo e generazione rapida delle ricevute di soggiorno e controllo delle spese operative.</p>
+                    <span class="feature-icon">&#128196;</span>
+                    <h3>Ricevute &amp; Spese</h3>
+                    <p>Emissione rapida delle ricevute per tassa di soggiorno e tracciamento dei costi operativi.</p>
                 </div>
 
                 <div class="feature-card">
-                    <div class="feature-icon">⚡</div>
+                    <span class="feature-icon">&#9889;</span>
                     <h3>Dashboard Unificata</h3>
-                    <p>Panoramica istantanea dello stato degli alloggi, scadenze imminenti e indicatori chiave delle prestazioni.</p>
+                    <p>Controllo costante delle prenotazioni attive, scadenze e stato delle unità ricettive.</p>
                 </div>
             </div>
         </section>
     </main>
 
-    <!-- Footer -->
     <footer>
-        <p>&copy; 2026 HostOps. Tutti i diritti riservati.</p>
+        <p>&#169; 2026 HostOps. Tutti i diritti riservati.</p>
     </footer>
 
 </body>
