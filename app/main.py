@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 
 from app.models import init_db
 from app.routers import checkin, dashboard, calendar_view, receipts, auth
@@ -71,3 +72,8 @@ app.include_router(auth.router)
 async def trigger_ical_sync():
     imported = await sync_external_ical_feeds()
     return {"status": "success", "imported": imported}
+
+# O "/dashboard", a seconda del tuo flusso
+@app.get("/")
+async def root():
+    return RedirectResponse(url="/login") 
