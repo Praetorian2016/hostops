@@ -3,93 +3,219 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registrazione Host | Channel Manager</title>
+    <title>Crea Account - HostOps</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-main: #0b0f19;
+            --bg-card: #111827;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #f9fafb;
+            --text-muted: #9ca3af;
+            --error-bg: rgba(239, 68, 68, 0.15);
+            --error-border: rgba(239, 68, 68, 0.3);
+            --error-text: #f87171;
+            --success-bg: rgba(34, 197, 94, 0.15);
+            --success-border: rgba(34, 197, 94, 0.3);
+            --success-text: #4ade80;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: #f1f5f9;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-            box-sizing: border-box;
+            padding: 24px;
         }
-        .card {
-            background: #ffffff;
-            padding: 32px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+
+        .auth-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 40px;
             width: 100%;
-            max-width: 400px;
+            max-width: 440px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
         }
-        h2 { margin-top: 0; color: #0f172a; font-size: 20px; text-align: center; }
-        .form-group { margin-bottom: 16px; }
-        label { display: block; margin-bottom: 6px; font-size: 13px; color: #475569; font-weight: 500; }
+
+        .logo-wrap {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: #ffffff;
+            text-decoration: none;
+        }
+
+        .logo span {
+            color: var(--primary);
+        }
+
+        .auth-header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .auth-header h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 6px;
+        }
+
+        .auth-header p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #d1d5db;
+            margin-bottom: 6px;
+        }
+
         input {
             width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            font-size: 14px;
-            box-sizing: border-box;
+            padding: 12px 14px;
+            border-radius: 8px;
+            background-color: #0b0f19;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            font-size: 0.92rem;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
-        input:focus { outline: none; border-color: #2563eb; }
+
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
         .btn-submit {
             width: 100%;
-            background-color: #2563eb;
+            padding: 12px;
+            margin-top: 10px;
+            border-radius: 8px;
+            background-color: var(--primary);
             color: #ffffff;
             border: none;
-            padding: 10px;
-            border-radius: 6px;
-            font-size: 14px;
+            font-size: 0.95rem;
             font-weight: 600;
             cursor: pointer;
-            margin-top: 8px;
+            transition: background-color 0.2s ease, transform 0.1s ease;
         }
-        .btn-submit:hover { background-color: #1d4ed8; }
-        .error-msg {
-            background-color: #fef2f2;
-            color: #dc2626;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 13px;
-            margin-bottom: 16px;
-            border: 1px solid #fecaca;
+
+        .btn-submit:hover {
+            background-color: var(--primary-hover);
         }
-        .link-footer { text-align: center; margin-top: 16px; font-size: 13px; color: #64748b; }
-        .link-footer a { color: #2563eb; text-decoration: none; }
-        .link-footer a:hover { text-decoration: underline; }
+
+        .btn-submit:active {
+            transform: scale(0.99);
+        }
+
+        .alert-error {
+            background-color: var(--error-bg);
+            border: 1px solid var(--error-border);
+            color: var(--error-text);
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background-color: var(--success-bg);
+            border: 1px solid var(--success-border);
+            color: var(--success-text);
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            margin-bottom: 20px;
+        }
+
+        .auth-footer {
+            margin-top: 24px;
+            text-align: center;
+            font-size: 0.88rem;
+            color: var(--text-muted);
+        }
+
+        .auth-footer a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .auth-footer a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2>Crea il tuo Account Host</h2>
-        
+
+    <div class="auth-card">
+        <div class="logo-wrap">
+            <a href="/" class="logo">Host<span>Ops</span></a>
+        </div>
+
+        <div class="auth-header">
+            <h1>Crea il tuo Account</h1>
+            <p>Configura l'accesso per gestire le tue strutture</p>
+        </div>
+
         {% if error %}
-        <div class="error-msg">{{ error }}</div>
+        <div class="alert-error">
+            {{ error }}
+        </div>
         {% endif %}
 
-        <form action="/register" method="post">
+        {% if message %}
+        <div class="alert-success">
+            {{ message }}
+        </div>
+        {% endif %}
+
+        <form action="/register" method="POST">
             <div class="form-group">
-                <label for="full_name">Nome e Cognome / Ragione Sociale</label>
-                <input type="text" id="full_name" name="full_name" required>
+                <label for="email">Indirizzo Email</label>
+                <input type="email" id="email" name="email" placeholder="nome@esempio.it" required autocomplete="email">
             </div>
-            <div class="form-group">
-                <label for="email">Email</label>
-                <input type="email" id="email" name="email" required autocomplete="email">
-            </div>
+
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" minlength="6" required autocomplete="new-password">
+                <input type="password" id="password" name="password" placeholder="Almeno 6 caratteri" required minlength="6" autocomplete="new-password">
             </div>
+
             <button type="submit" class="btn-submit">Registrati</button>
         </form>
 
-        <div class="link-footer">
-            Hai già un account? <a href="/login">Accedi qui</a>
+        <div class="auth-footer">
+            Hai già un account? <a href="/login">Accedi</a>
         </div>
     </div>
+
 </body>
 </html>
