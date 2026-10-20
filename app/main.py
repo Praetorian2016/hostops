@@ -1,4 +1,5 @@
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
@@ -8,7 +9,7 @@ from app.models import init_db
 from app.routers import checkin, dashboard, calendar_view, receipts, auth
 from app.services.calendar_sync import sync_external_ical_feeds
 
-# Intervallo in secondi (es. 60 secondi = 1 minuto per minimizzare rischio overbooking)
+# Intervallo in secondi per eventuale worker standalone
 SYNC_INTERVAL_SECONDS = 60
 
 async def periodic_calendar_sync():
@@ -23,12 +24,6 @@ async def periodic_calendar_sync():
         
         await asyncio.sleep(SYNC_INTERVAL_SECONDS)
 
-import os
-from pathlib import Path
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from contextlib import asynccontextmanager
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Inizializzazione db se necessaria
@@ -42,7 +37,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="HostOps", lifespan=lifespan)
 
-# Percorso base assoluto
+# Percorso base assoluto del progetto
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Monta 'static' se la cartella esiste
@@ -50,10 +45,19 @@ static_dir = BASE_DIR / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# Monta 'uploads' creando la cartella se non esiste
-uploads_dir = BASE_DIR / "uploads"
-uploads_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
+# Gestione directory 'uploads' (read-only filesystem bypass per Vercel)
+if os.getenv("VERCEL"):
+    uploads_dir = Path("/tmp/uploads")
+else:
+    uploads_dir = BASE_DIR / "uploads"
+
+try:
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
+
+if uploads_dir.exists():
+    app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
 # Inclusione router
 app.include_router(checkin.router)
