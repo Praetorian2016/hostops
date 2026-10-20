@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HostOps - Dashboard</title>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --success: #16a34a;
+            --danger: #dc2626;
+            --tax: #d97706;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: var(--bg); color: var(--text-main); padding: 24px; }
+        .container { max-width: 1250px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+        header { display: flex; justify-content: space-between; align-items: baseline; }
+        h1 { font-size: 1.6rem; font-weight: 700; }
+        h2 { font-size: 1.15rem; font-weight: 600; margin-bottom: 12px; }
+
+        /* KPI Grid */
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+        .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+        .card-label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+        .card-value { font-size: 1.45rem; font-weight: 700; margin-top: 6px; }
+        .net-positive { color: var(--success); }
+
+        /* Tables */
+        .table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
+        th, td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+        th { background: #f1f5f9; color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; font-weight: 700; }
+        tr:hover { background: #f8fafc; }
+
+        /* Badges & Actions */
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+        .badge-channel { background: #e0f2fe; color: #0284c7; }
+        .badge-status-pending { background: #fef3c7; color: #b45309; }
+        .badge-status-gen { background: #dcfce7; color: #15803d; }
+        .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 0.8rem; font-weight: 600; cursor: pointer; border: none; }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-primary:hover { background: var(--primary-hover); }
+
+        /* Review Grid Documents/Selfie */
+        .guest-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+        .guest-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+        .guest-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+        .img-preview-group { display: flex; gap: 10px; margin-top: 10px; }
+        .img-box { flex: 1; text-align: center; }
+        .img-box img { width: 100%; height: 110px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
+        .img-placeholder { height: 110px; background: #f1f5f9; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; color: var(--text-muted); }
+        .img-caption { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div>
+            <h1>Dashboard HostOps</h1>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Monitoraggio P&L prenotazioni, imposta di soggiorno e tracciati Polizia</p>
+        </div>
+        <div>
+        <a href="/calendar" class="btn btn-primary" style="font-size: 0.95rem; padding: 10px 18px;">
+            📅 Apri Calendario Struttura
+        </a>
+    </div>
+    </header>
+
+    <!-- METRICHE P&L & IMPOSTA -->
+    <section class="kpi-grid">
+        <div class="card">
+            <div class="card-label">Prenotazioni</div>
+            <div class="card-value">{{ totals.total_bookings }}</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Incasso Lordo</div>
+            <div class="card-value">€ {{ "%.2f"|format(totals.gross) }}</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Commissioni OTA</div>
+            <div class="card-value" style="color: var(--danger);">-€ {{ "%.2f"|format(totals.ota_commission) }}</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Pulizie & Biancheria</div>
+            <div class="card-value">-€ {{ "%.2f"|format(totals.cleaning_linen) }}</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Utenze Stimate</div>
+            <div class="card-value">-€ {{ "%.2f"|format(totals.utilities) }}</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Profitto Netto</div>
+            <div class="card-value net-positive">€ {{ "%.2f"|format(totals.net_profit) }}</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Imposta Soggiorno</div>
+            <div class="card-value" style="color: var(--tax);">€ {{ "%.2f"|format(totals.total_tourist_tax) }}</div>
+        </div>
+    </section>
+
+    <!-- LISTA PRENOTAZIONI & ALLOGGIATI WEB -->
+    <section class="card">
+        <h2>Riepilogo Prenotazioni, Imposta & Export Alloggiati Web</h2>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID / Prenotazione</th>
+                        <th>Canale</th>
+                        <th>Soggiorno</th>
+                        <th>Lordo</th>
+                        <th>OTA Fee</th>
+                        <th>Imposta Soggiorno</th>
+                        <th>Costi Gestione</th>
+                        <th>Netto</th>
+                        <th>Ospiti</th>
+                        <th>Tracciato Polizia</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for b in bookings %}
+                    <tr>
+                        <td><strong>#{{ b.id }} - {{ b.guest_name }}</strong></td>
+                        <td><span class="badge badge-channel">{{ b.channel }}</span></td>
+                        <td>{{ b.check_in }} &rarr; {{ b.check_out }} ({{ b.nights }}n)</td>
+                        <td>€ {{ "%.2f"|format(b.gross_revenue) }}</td>
+                        <td>€ {{ "%.2f"|format(b.ota_commission) }}</td>
+                        <td style="color: var(--tax); font-weight: 600;">€ {{ "%.2f"|format(b.tourist_tax) }}</td>
+                        <td>€ {{ "%.2f"|format(b.cleaning_cost + b.linen_kit_cost + b.utilities_est) }}</td>
+                        <td><strong class="net-positive">€ {{ "%.2f"|format(b.calculated_net_profit) }}</strong></td>
+                        <td>{{ b.registered_guests_count }} / {{ b.guests_count }}</td>
+                        <td>
+                            {% if b.registered_guests_count > 0 %}
+                            <a href="/dashboard/download-alloggiati/{{ b.id }}" class="btn btn-primary">
+                                Scarica .txt (157 car.)
+                            </a>
+                            {% else %}
+                            <span style="color: var(--text-muted); font-size: 0.8rem;">In attesa di dati</span>
+                            {% endif %}
+                            <a href="/dashboard/receipt/tourist-tax/{{ b.id }}" 
+   target="_blank" 
+   class="btn btn-sm btn-outline-secondary">
+    📄 Ricevuta
+</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="10" style="text-align: center; color: var(--text-muted); padding: 20px;">Nessuna prenotazione presente nel database.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- REVISIONE IDENTITÀ: DOCUMENTI E SELFIE -->
+    <section class="card">
+        <h2>Verifica Identità e Foto (Self Check-in)</h2>
+        <div class="guest-grid">
+            {% for g in guests %}
+            <div class="guest-card">
+                <div class="guest-header">
+                    <strong>{{ g.first_name }} {{ g.last_name }}</strong>
+                    <span class="badge {% if g.alloggiati_status == 'GENERATED' %}badge-status-gen{% else %}badge-status-pending{% endif %}">
+                        {{ g.alloggiati_status }}
+                    </span>
+                </div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+                    Prenotazione: #{{ g.booking_id }} ({{ g.booking_guest_name }})<br>
+                    Tipo Ospite: {{ g.guest_type }} | Sesso: {{ 'M' if g.gender == '1' else 'F' }}<br>
+                    Doc: {{ g.doc_type or 'N/D' }} - {{ g.doc_number or 'N/D' }}
+                </div>
+                
+                <div class="img-preview-group">
+                    <div class="img-box">
+                        {% if g.doc_image_path %}
+                        <a href="/{{ g.doc_image_path }}" target="_blank">
+                            <img src="/{{ g.doc_image_path }}" alt="Documento">
+                        </a>
+                        <div class="img-caption">Documento</div>
+                        {% else %}
+                        <div class="img-placeholder">Nessun file</div>
+                        <div class="img-caption">Documento</div>
+                        {% endif %}
+                    </div>
+                    <div class="img-box">
+                        {% if g.selfie_image_path %}
+                        <a href="/{{ g.selfie_image_path }}" target="_blank">
+                            <img src="/{{ g.selfie_image_path }}" alt="Selfie">
+                        </a>
+                        <div class="img-caption">Selfie</div>
+                        {% else %}
+                        <div class="img-placeholder">Nessun file</div>
+                        <div class="img-caption">Selfie</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <p style="color: var(--text-muted); grid-column: 1 / -1; padding: 12px 0;">Nessun ospite inserito finora.</p>
+            {% endfor %}
+        </div>
+    </section>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HostOps - Calendario & Blocchi</title>
+    <!-- FullCalendar CSS & JS via CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --border: #e2e8f0;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --success: #16a34a;
+            --danger: #dc2626;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: var(--bg); color: var(--text-main); padding: 24px; }
+        .container { max-width: 1250px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+        .top-nav { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        .btn { padding: 8px 14px; border-radius: 6px; font-weight: 600; font-size: 0.85rem; text-decoration: none; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-outline { background: white; border: 1px solid var(--border); color: var(--text-main); }
+        .btn-outline:hover { background: #f1f5f9; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        
+        .calendar-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        
+        /* Modal */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; border-radius: 8px; width: 100%; max-width: 480px; padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .modal-content h3 { font-size: 1.2rem; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group label { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); }
+        .form-group input, .form-group select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+
+        /* Badge legenda */
+        .legend { display: flex; gap: 16px; font-size: 0.85rem; align-items: center; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="top-nav">
+        <div>
+            <h1>Calendario Struttura &amp; Blocchi</h1>
+            <p style="color: var(--text-muted); font-size: 0.9rem;">Sincronizzazione bidirezionale, blocchi manutenzione e planning prenotazioni</p>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <a href="/dashboard" class="btn btn-outline">&larr; Dashboard</a>
+            <button class="btn btn-outline" onclick="openFeedModal()">🔗 Gestione Feed OTA</button>
+            <button class="btn btn-success" id="btnSync" onclick="triggerSync()">🔄 Sincronizza Ora</button>
+            <a href="/calendar/export.ics" class="btn btn-outline" download="hostops_calendar.ics">📥 Scarica iCal (.ics)</a>
+            <button class="btn btn-primary" onclick="openBlockModal()">+ Blocca Date</button>
+        </div>
+    </div>
+
+    <!-- LEGENDA CANALI -->
+    <div class="legend">
+        <span style="font-weight: 600; color: var(--text-muted);">Canali:</span>
+        <div class="legend-item"><div class="legend-dot" style="background: #FF5A5F;"></div> Airbnb</div>
+        <div class="legend-item"><div class="legend-dot" style="background: #003580;"></div> Booking.com</div>
+        <div class="legend-item"><div class="legend-dot" style="background: #16a34a;"></div> Diretto</div>
+        <div class="legend-item"><div class="legend-dot" style="background: #64748b;"></div> ⛔ Data Bloccata</div>
+    </div>
+
+    <div class="calendar-card">
+        <div id="calendar"></div>
+    </div>
+</div>
+
+<!-- MODAL: BLOCCA DATE -->
+<div id="blockModal" class="modal">
+    <div class="modal-content">
+        <h3>Blocca Date Calendario</h3>
+        <form id="blockForm">
+            <div class="form-group">
+                <label for="blockReason">Motivo del blocco</label>
+                <input type="text" id="blockReason" name="reason" value="Manutenzione" required />
+            </div>
+            <div class="form-group">
+                <label for="blockCheckIn">Da (Check-in)</label>
+                <input type="date" id="blockCheckIn" name="check_in" required />
+            </div>
+            <div class="form-group">
+                <label for="blockCheckOut">A (Check-out)</label>
+                <input type="date" id="blockCheckOut" name="check_out" required />
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="closeModal('blockModal')">Annulla</button>
+                <button type="submit" class="btn btn-primary">Conferma Blocco</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: GESTIONE FEED OTA -->
+<div id="feedModal" class="modal">
+    <div class="modal-content">
+        <h3>Collega Feed iCal OTA</h3>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Incolla l'URL iCal esportato da Airbnb o Booking.com per importare automaticamente i calendari.</p>
+        <form id="feedForm">
+            <div class="form-group">
+                <label for="channelName">Canale OTA</label>
+                <select id="channelName" name="channel_name" required>
+                    <option value="Airbnb">Airbnb</option>
+                    <option value="Booking.com">Booking.com</option>
+                    <option value="Diretto">Altro Canale</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="feedUrl">URL Feed iCal (.ics)</label>
+                <input type="url" id="feedUrl" name="feed_url" placeholder="https://.../calendar.ics" required />
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="closeModal('feedModal')">Annulla</button>
+                <button type="submit" class="btn btn-primary">Salva Feed</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: DETTAGLIO / MODIFICA / SBLOCCO PRENOTAZIONE -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <h3 id="editTitle">Dettaglio</h3>
+        <p id="editSubtitle" style="font-size: 0.85rem; color: var(--text-muted);"></p>
+        <form id="editForm">
+            <input type="hidden" id="editEntryId" />
+            <div class="form-group">
+                <label for="editCheckIn">Data Inizio</label>
+                <input type="date" id="editCheckIn" required />
+            </div>
+            <div class="form-group">
+                <label for="editCheckOut">Data Fine</label>
+                <input type="date" id="editCheckOut" required />
+            </div>
+            <div class="modal-actions" style="justify-content: space-between;">
+                <button type="button" class="btn btn-danger" onclick="deleteEntryAction()">Elimina / Sblocca</button>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn btn-outline" onclick="closeModal('editModal')">Chiudi</button>
+                    <button type="submit" class="btn btn-primary">Salva Date</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    let calendar;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const calendarEl = document.getElementById('calendar');
+        calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            locale: 'it',
+            firstDay: 1,
+            headerToolbar: {
+                left: 'prev,next today',
+                center: 'title',
+                right: 'dayGridMonth,timeGridWeek'
+            },
+            events: '/calendar/events',
+            selectable: true,
+            select: function(info) {
+                document.getElementById('blockCheckIn').value = info.startStr;
+                document.getElementById('blockCheckOut').value = info.endStr;
+                openBlockModal();
+            },
+            eventClick: function(info) {
+                const event = info.event;
+                document.getElementById('editEntryId').value = event.id;
+                document.getElementById('editTitle').textContent = event.title;
+                document.getElementById('editSubtitle').textContent = 'Canale: ' + event.extendedProps.channel;
+                document.getElementById('editCheckIn').value = event.startStr;
+                document.getElementById('editCheckOut').value = event.endStr;
+                document.getElementById('editModal').style.display = 'flex';
+            }
+        });
+        calendar.render();
+    });
+
+    function openBlockModal() { document.getElementById('blockModal').style.display = 'flex'; }
+    function openFeedModal() { document.getElementById('feedModal').style.display = 'flex'; }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+    // Sincronizzazione Immediata
+    async function triggerSync() {
+        const btn = document.getElementById('btnSync');
+        btn.textContent = '⏳ Sincronizzazione in corso...';
+        btn.disabled = true;
+        try {
+            const res = await fetch('/calendar/sync-now', { method: 'POST' });
+            const data = await res.json();
+            alert(`Sincronizzazione completata!\nNuove prenotazioni importate: ${data.imported}`);
+            calendar.refetchEvents();
+        } catch (err) {
+            alert('Errore durante la sincronizzazione');
+        } finally {
+            btn.textContent = '🔄 Sincronizza Ora';
+            btn.disabled = false;
+        }
+    }
+
+    // Salva Feed OTA
+    document.getElementById('feedForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const res = await fetch('/calendar/add-feed', { method: 'POST', body: formData });
+        if (res.ok) {
+            alert('Feed iCal registrato con successo!');
+            closeModal('feedModal');
+            this.reset();
+        } else {
+            alert('Errore nel salvataggio del feed');
+        }
+    });
+
+    // Salva Blocco Date
+    document.getElementById('blockForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const res = await fetch('/calendar/block-dates', { method: 'POST', body: formData });
+        if (res.ok) {
+            closeModal('blockModal');
+            calendar.refetchEvents();
+        } else {
+            const err = await res.json();
+            alert('Errore: ' + (err.detail || 'Operazione non riuscita'));
+        }
+    });
+
+    // Modifica Date Esistenti
+    document.getElementById('editForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const id = document.getElementById('editEntryId').value;
+        const formData = new FormData();
+        formData.append('check_in', document.getElementById('editCheckIn').value);
+        formData.append('check_out', document.getElementById('editCheckOut').value);
+
+        const res = await fetch(`/calendar/update-dates/${id}`, { method: 'POST', body: formData });
+        if (res.ok) {
+            closeModal('editModal');
+            calendar.refetchEvents();
+        } else {
+            alert('Errore nell\'aggiornamento delle date');
+        }
+    });
+
+    // Elimina o Sblocca
+    async function deleteEntryAction() {
+        const id = document.getElementById('editEntryId').value;
+        if (!confirm('Confermi di voler eliminare questa prenotazione / sbloccare queste date?')) return;
+        const res = await fetch(`/calendar/delete-entry/${id}`, { method: 'POST' });
+        if (res.ok) {
+            closeModal('editModal');
+            calendar.refetchEvents();
+        }
+    }
+</script>
+
+</body>
+</html>

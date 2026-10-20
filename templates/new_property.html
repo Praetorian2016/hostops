@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configura Struttura | Channel Manager</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f8fafc;
+            padding: 40px 20px;
+            margin: 0;
+            color: #1e293b;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 32px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
+        }
+        h2 { margin-top: 0; font-size: 22px; color: #0f172a; }
+        p.subtitle { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        .full-width { grid-column: span 2; }
+        .form-group { margin-bottom: 16px; }
+        label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; color: #475569; }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        input:focus, select:focus { outline: none; border-color: #2563eb; }
+        .btn-submit {
+            background-color: #2563eb;
+            color: #ffffff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 8px;
+        }
+        .btn-submit:hover { background-color: #1d4ed8; }
+        .error-msg {
+            background-color: #fef2f2;
+            color: #dc2626;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 20px;
+            border: 1px solid #fecaca;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Aggiungi una Nuova Struttura</h2>
+        <p class="subtitle">Inserisci i parametri dell'alloggio per calcolare ricevute e imposta di soggiorno.</p>
+
+        {% if error %}
+        <div class="error-msg">{{ error }}</div>
+        {% endif %}
+
+        <form action="/properties/new" method="post">
+            <div class="form-group full-width">
+                <label for="name">Nome Struttura (es. Praetorian Apartment)</label>
+                <input type="text" id="name" name="name" required placeholder="Praetorian Apartment">
+            </div>
+
+            <div class="form-group full-width">
+                <label for="manager_name">Nome Gestore / Titolare (compare in ricevuta)</label>
+                <input type="text" id="manager_name" name="manager_name" required placeholder="Es. Armando Puccilli">
+            </div>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="city">Città</label>
+                    <input type="text" id="city" name="city" required placeholder="Roma">
+                </div>
+                <div class="form-group">
+                    <label for="province">Provincia (sigla)</label>
+                    <input type="text" id="province" name="province" maxlength="2" required placeholder="RM">
+                </div>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="tax_rate">Tariffa Imposta di Soggiorno (€ per notte a persona)</label>
+                    <input type="number" step="0.50" id="tax_rate" name="tax_rate" value="6.00" required>
+                </div>
+                <div class="form-group">
+                    <label for="max_taxable_nights">Massimo Notti Imponibili</label>
+                    <input type="number" id="max_taxable_nights" name="max_taxable_nights" value="10" required>
+                </div>
+            </div>
+
+            <div class="form-group full-width">
+                <label for="ical_booking_url">Feed iCal Booking.com (Opzionale)</label>
+                <input type="url" id="ical_booking_url" name="ical_booking_url" placeholder="https://admin.booking.com/hotel/hoteladmin/ical.html?...">
+            </div>
+
+            <button type="submit" class="btn-submit">Salva Struttura e Vai alla Dashboard</button>
+        </form>
+    </div>
+</body>
+</html>

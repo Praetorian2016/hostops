@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HostOps - Self Check-in</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #22c55e;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 16px;
+        }
+        .card {
+            background-color: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            width: 100%;
+            max-width: 520px;
+            padding: 24px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+        .header {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 1.4rem;
+            margin-bottom: 6px;
+        }
+        .header p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+        .form-group {
+            margin-bottom: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .row-2 {
+            display: flex;
+            gap: 12px;
+        }
+        .row-2 .form-group {
+            flex: 1;
+        }
+        label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+        input, select {
+            background: #0f172a;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-main);
+            padding: 10px 12px;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus, select:focus {
+            border-color: var(--primary);
+        }
+        .file-upload-box {
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+            background: rgba(15, 23, 42, 0.4);
+            cursor: pointer;
+        }
+        .file-upload-box input[type="file"] {
+            display: none;
+        }
+        .file-label {
+            cursor: pointer;
+            display: block;
+            font-size: 0.85rem;
+            color: var(--primary);
+            text-transform: none;
+            font-weight: 500;
+        }
+        .btn-submit {
+            margin-top: 18px;
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary);
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 1rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-submit:hover {
+            background-color: var(--primary-hover);
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div class="header">
+        <h1>Registrazione Ospite</h1>
+        <p>Inserisci i dati obbligatori per la comunicazione alla Questura (Alloggiati Web)</p>
+    </div>
+
+    <form action="/checkin/{{ booking_id }}" method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="guest_type">Tipologia Ospite</label>
+            <select id="guest_type" name="guest_type" required>
+                <option value="16">Ospite Singolo</option>
+                <option value="17" selected>Capofamiglia</option>
+                <option value="18">Capogruppo</option>
+                <option value="19">Ospite aggregato</option>
+            </select>
+        </div>
+
+        <div class="row-2">
+            <div class="form-group">
+                <label for="first_name">Nome</label>
+                <input type="text" id="first_name" name="first_name" autocomplete="given-name" required placeholder="Mario">
+            </div>
+            <div class="form-group">
+                <label for="last_name">Cognome</label>
+                <input type="text" id="last_name" name="last_name" autocomplete="family-name" required placeholder="Rossi">
+            </div>
+        </div>
+
+        <div class="row-2">
+            <div class="form-group">
+                <label for="gender">Sesso</label>
+                <select id="gender" name="gender" autocomplete="sex" required>
+                    <option value="1">Maschio (1)</option>
+                    <option value="2">Femmina (2)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="birth_date">Data di Nascita</label>
+                <input type="date" id="birth_date" name="birth_date" autocomplete="bday" required>
+            </div>
+        </div>
+
+        <div class="row-2">
+            <div class="form-group">
+                <label for="birth_place_code">Codice Luogo Nascita</label>
+                <input type="text" id="birth_place_code" name="birth_place_code" required placeholder="Es. H501 o Stato Estero">
+            </div>
+            <div class="form-group">
+                <label for="citizenship_code">Codice Cittadinanza</label>
+                <input type="text" id="citizenship_code" name="citizenship_code" value="100000100" required>
+            </div>
+        </div>
+
+        <div class="row-2">
+            <div class="form-group">
+                <label for="doc_type">Tipo Documento</label>
+                <select id="doc_type" name="doc_type">
+                    <option value="IDENT">Carta d'Identità</option>
+                    <option value="PASSP">Passaporto</option>
+                    <option value="PATEN">Patente di Guida</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="doc_number">Numero Documento</label>
+                <input type="text" id="doc_number" name="doc_number" placeholder="Es. CA12345AA">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="doc_issuer_place">Codice Luogo Rilascio Doc</label>
+            <input type="text" id="doc_issuer_place" name="doc_issuer_place" placeholder="Es. H501">
+        </div>
+
+        <div class="form-group">
+            <label for="doc_file">Foto Documento</label>
+            <div class="file-upload-box">
+                <label for="doc_file" class="file-label" id="doc_file_label">Scatta o seleziona foto documento</label>
+                <input type="file" id="doc_file" name="doc_file" accept="image/*" capture="environment">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="selfie_file">Selfie Riconoscimento</label>
+            <div class="file-upload-box">
+                <label for="selfie_file" class="file-label" id="selfie_file_label">Scatta selfie con fotocamera frontale</label>
+                <input type="file" id="selfie_file" name="selfie_file" accept="image/*" capture="user">
+            </div>
+        </div>
+
+        <button type="submit" class="btn-submit">Conferma e Invia Dati</button>
+    </form>
+</div>
+
+<script>
+    // Mostra il nome del file selezionato all'interno delle caselle di upload
+    document.getElementById('doc_file').addEventListener('change', function(e) {
+        if (e.target.files.length > 0) {
+            document.getElementById('doc_file_label').textContent = 'Selezionato: ' + e.target.files[0].name;
+        }
+    });
+
+    document.getElementById('selfie_file').addEventListener('change', function(e) {
+        if (e.target.files.length > 0) {
+            document.getElementById('selfie_file_label').textContent = 'Selezionato: ' + e.target.files[0].name;
+        }
+    });
+</script>
+
+</body>
+</html>
