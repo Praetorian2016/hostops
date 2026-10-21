@@ -10,6 +10,12 @@ def extract_guest_data_from_image(image_bytes: bytes, mime_type: str = "image/jp
 
     client = genai.Client(api_key=api_key)
 
+    # Modelli attivi: tenta prima con gemini-3.8-flash, se risponde 503 passa a 1.5-flash
+    models_to_try = [
+        "gemini-3.8-flash",
+        "gemini-1.5-flash"
+    ]
+
     prompt = """
     Analizza l'immagine di questo documento di identità (passaporto, carta d'identità o patente) 
     ed estrai i dati anagrafici essenziali dell'ospite per la registrazione di pubblica sicurezza.
@@ -29,16 +35,30 @@ def extract_guest_data_from_image(image_bytes: bytes, mime_type: str = "image/jp
     Non aggiungere markdown (senza ```json o testo di commento). Solo il JSON puro.
     """
 
-    response = client.models.generate_content(
-        model="gemini-3.8-flash",
-        contents=[
-            types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-            prompt
-        ],
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json"
-        )
-    )
+    last_error = None
 
-    clean_text = response.text.replace("```json", "").replace("```", "").strip()
-    return json.loads(clean_text)
+    for model_name in models_to_try:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[
+                    types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                    prompt
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
+            )
+
+            clean_text = response.text.replace("```json", "").replace("```", "").strip()
+            return json.loads(clean_text)
+
+        except Exception as e:
+            last_error = e
+            # Se gemini-3.8-flash risponde con 503 o picchi di traffico, passa a 1.5-flash
+            err_str = str(e)
+            if any(code in err_str for code in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED"]):
+                continue
+            raise e
+
+    raise Exception(f"Servizio OCR temporaneamente indisponibile: {str(last_error)}")
