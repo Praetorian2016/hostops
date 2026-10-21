@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from google import genai
 from google.genai import types
 
@@ -9,8 +10,6 @@ def extract_guest_data_from_image(image_bytes: bytes, mime_type: str = "image/jp
         raise ValueError("GEMINI_API_KEY non configurata nelle variabili d'ambiente.")
 
     client = genai.Client(api_key=api_key)
-
-    # Modello primario corrente raccomandato dalle API Google
     model_name = "gemini-3.8-flash"
 
     prompt = """
@@ -33,33 +32,51 @@ def extract_guest_data_from_image(image_bytes: bytes, mime_type: str = "image/jp
     }
     """
 
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                prompt
-            ],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json"
+    # Fino a 3 tentativi con pausa progressiva per superare l'errore 503 di sovraccarico
+    max_retries = 3
+    last_exception = None
+
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[
+                    types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                    prompt
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
             )
-        )
 
-        clean_text = response.text.replace("```json", "").replace("```", "").strip()
-        data = json.loads(clean_text)
+            clean_text = response.text.replace("```json", "").replace("```", "").strip()
+            data = json.loads(clean_text)
 
-        # Normalizzazione chiavi per evitare KeyError nel backend
-        default_keys = [
-            "first_name", "last_name", "gender", "birth_date", 
-            "birth_place", "birth_place_code", "citizenship", 
-            "citizenship_code", "doc_type", "doc_number", "doc_issuer"
-        ]
-        for key in default_keys:
-            if key not in data or data[key] is None:
-                data[key] = ""
+            # Normalizzazione chiavi per evitare KeyError
+            default_keys = [
+                "first_name", "last_name", "gender", "birth_date", 
+                "birth_place", "birth_place_code", "citizenship", 
+                "citizenship_code", "doc_type", "doc_number", "doc_issuer"
+            ]
+            for key in default_keys:
+                if key not in data or data[key] is None:
+                    data[key] = ""
 
-        return data
+            return data
 
-    except Exception as e:
-        print(f"[OCR Errore Gemini]: {e}")
-        raise Exception(f"Errore durante l'elaborazione dell'immagine con {model_name}: {str(e)}")
+        except Exception as e:
+            last_exception = e
+            err_str = str(e)
+            
+            # Se è un errore di sovraccarico (503/429/UNAVAILABLE), attende prima di riprovare
+            if any(code in err_str for code in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED"]):
+                if attempt < max_retries - 1:
+                    sleep_time = (attempt + 1) * 1.5  # Pausa di 1.5s la prima volta, poi 3s
+                    print(f"[OCR Retry] Sovraccarico temporaneo su {model_name}. Tentativo {attempt + 1} fallito. Attesa di {sleep_time}s...")
+                    time.sleep(sleep_time)
+                    continue
+            
+            # Se è un altro errore non temporaneo, solleva subito l'eccezione
+            raise e
+
+    raise Exception(f"Servizio OCR occupato dopo {max_retries} tentativi: {str(last_exception)}")
