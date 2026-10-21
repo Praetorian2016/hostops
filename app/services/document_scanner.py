@@ -10,29 +10,31 @@ def extract_guest_data_from_image(image_bytes: bytes, mime_type: str = "image/jp
 
     client = genai.Client(api_key=api_key)
 
-    # Modelli attivi per il tentato fallback
+    # Modelli supportati e validi per GenerateContent nella nuova SDK
     models_to_try = [
-        "gemini-3.8-flash",
-        "gemini-1.5-flash"
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash-latest"
     ]
 
     prompt = """
     Analizza l'immagine di questo documento di identità (passaporto, carta d'identità o patente) 
-    ed estrai i dati anagrafici essenziali dell'ospite per la registrazione di pubblica sicurezza.
+    ed estrai i dati anagrafici dell'ospite.
     
-    Restituisci ESCLUSIVAMENTE un oggetto JSON valido con i seguenti campi esatti:
+    Restituisci ESCLUSIVAMENTE un oggetto JSON valido (senza markdown o blocchi ```json) con queste chiavi esatte:
     {
         "first_name": "Nome",
         "last_name": "Cognome",
         "gender": "M o F",
         "birth_date": "YYYY-MM-DD",
         "birth_place": "Comune o Stato estero di nascita",
-        "citizenship": "Stato di cittadinanza (es. ITALIA, STATI UNITI, GERMANIA)",
+        "birth_place_code": "Codice catasto o codice stato se presente, altrimenti stringa vuota",
+        "citizenship": "Stato di cittadinanza",
+        "citizenship_code": "Codice stato di cittadinanza se presente, altrimenti stringa vuota",
         "doc_type": "IDENTITA, PASSAPORTO o PATENTE",
         "doc_number": "Numero del documento",
-        "doc_issuer": "Autorità o Comune di rilascio"
+        "doc_issuer": "Autorità di rilascio"
     }
-    Non aggiungere markdown (senza ```json o testo di commento). Solo il JSON puro.
     """
 
     last_error = None
@@ -51,12 +53,23 @@ def extract_guest_data_from_image(image_bytes: bytes, mime_type: str = "image/jp
             )
 
             clean_text = response.text.replace("```json", "").replace("```", "").strip()
-            return json.loads(clean_text)
+            data = json.loads(clean_text)
+
+            # Normalizzazione campi
+            default_keys = [
+                "first_name", "last_name", "gender", "birth_date", 
+                "birth_place", "birth_place_code", "citizenship", 
+                "citizenship_code", "doc_type", "doc_number", "doc_issuer"
+            ]
+            for key in default_keys:
+                if key not in data or data[key] is None:
+                    data[key] = ""
+
+            return data
 
         except Exception as e:
             last_error = e
-            # Log su Vercel e prosegui con il modello successivo senza bloccare il ciclo
-            print(f"Errore con {model_name}: {e}")
+            print(f"[OCR] Fallito tentato con {model_name}: {e}")
             continue
 
     raise Exception(f"Servizio OCR indisponibile su tutti i modelli: {str(last_error)}")
