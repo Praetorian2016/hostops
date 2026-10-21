@@ -348,18 +348,18 @@
             </div>
             {% if property %}
             <div class="export-actions-bar">
-                <!-- Export Alloggiati Web (Data di oggi) -->
-                <a href="/dashboard/export/alloggiati-web?property_id={{ property.id }}&target_date={{ today_date }}" 
-                   class="btn btn-alloggiati"
-                   title="Scarica il file .txt conforme per la Polizia di Stato per gli arrivi odierni">
-                    &#128196; Alloggiati Web (.txt)
-                </a>
-
-                <!-- Export ROSS 1000 Lazio (Mese in corso) -->
-                <a href="/dashboard/export/ross1000?property_id={{ property.id }}&start_date={{ today_date[:7] }}-01&end_date={{ today_date }}" 
+                <!-- Export ROSS 1000 Lazio (ISTAT) -->
+                <a href="/dashboard/export/ross1000?property_id={{ property.id }}" 
                    class="btn btn-ross1000"
                    title="Scarica il file .csv dei movimenti per ROSS 1000 Lazio / ISTAT">
-                    &#128202; ROSS 1000 Lazio (.csv)
+                    &#128202; Scarica ROSS 1000 (.csv)
+                </a>
+
+                <!-- Export Alloggiati Web (Polizia di Stato) -->
+                <a href="/dashboard/export/alloggiati-web?property_id={{ property.id }}" 
+                   class="btn btn-alloggiati"
+                   title="Scarica il file .txt conforme per la Polizia di Stato">
+                    &#128196; Scarica Alloggiati (.txt)
                 </a>
             </div>
             {% endif %}
@@ -436,7 +436,7 @@
                                 <td>
                                     <div style="display: flex; gap: 6px; align-items: center;">
                                         <a href="/dashboard/receipt/tourist-tax/{{ b.id }}" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.78rem;">Ricevuta</a>
-                                        <a href="/dashboard/export/alloggiati-web?property_id={{ property.id }}&target_date={{ b.check_in }}" class="btn btn-alloggiati" style="padding: 4px 8px; font-size: 0.75rem;" title="Scarica .txt Alloggiati per la data di questo arrivo">&#128196; .txt</a>
+                                        <a href="/dashboard/export/alloggiati-web?property_id={{ property.id }}&target_date={{ b.check_in }}" class="btn btn-alloggiati" style="padding: 4px 8px; font-size: 0.75rem;" title="Scarica .txt Alloggiati per questo soggiorno">&#128196; .txt</a>
                                     </div>
                                 </td>
                             </tr>
@@ -460,7 +460,12 @@
                 <h2>Verifica Identit&#224; &amp; Ospiti (Self Check-in)</h2>
                 {% if property %}
                 <div style="display: flex; gap: 8px;">
-                    <a href="/dashboard/export/alloggiati-web?property_id={{ property.id }}&target_date={{ today_date }}" class="btn btn-outline" style="padding: 6px 12px; font-size: 0.8rem;">Scarica Alloggiati Oggi</a>
+                    <a href="/dashboard/export/ross1000?property_id={{ property.id }}" class="btn btn-ross1000" style="padding: 6px 12px; font-size: 0.8rem;">
+                        &#128202; Scarica ROSS 1000 (ISTAT)
+                    </a>
+                    <a href="/dashboard/export/alloggiati-web?property_id={{ property.id }}" class="btn btn-alloggiati" style="padding: 6px 12px; font-size: 0.8rem;">
+                        &#128196; Scarica Alloggiati Oggi
+                    </a>
                 </div>
                 {% endif %}
             </div>
