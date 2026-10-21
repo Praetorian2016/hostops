@@ -10,7 +10,7 @@ def extract_guest_data_from_image(image_bytes: bytes, mime_type: str = "image/jp
 
     client = genai.Client(api_key=api_key)
 
-    # Modelli attivi: tenta prima con gemini-3.8-flash, se risponde 503 passa a 1.5-flash
+    # Modelli attivi per il tentato fallback
     models_to_try = [
         "gemini-3.8-flash",
         "gemini-1.5-flash"
@@ -55,10 +55,8 @@ def extract_guest_data_from_image(image_bytes: bytes, mime_type: str = "image/jp
 
         except Exception as e:
             last_error = e
-            # Se gemini-3.8-flash risponde con 503 o picchi di traffico, passa a 1.5-flash
-            err_str = str(e)
-            if any(code in err_str for code in ["503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED"]):
-                continue
-            raise e
+            # Log su Vercel e prosegui con il modello successivo senza bloccare il ciclo
+            print(f"Errore con {model_name}: {e}")
+            continue
 
-    raise Exception(f"Servizio OCR temporaneamente indisponibile: {str(last_error)}")
+    raise Exception(f"Servizio OCR indisponibile su tutti i modelli: {str(last_error)}")
