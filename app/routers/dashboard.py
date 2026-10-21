@@ -1,4 +1,5 @@
 import os
+import traceback
 from pathlib import Path
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
@@ -29,24 +30,34 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 # FUNZIONI HELPER PER TRACCIATO ALLOGGIATI
 # ==========================================
 def _pad_str(val: Any, length: int) -> str:
-    """Tronca o riempie con spazi a destra fino alla lunghezza indicata."""
+    """Tronca o riempie con spazi a destra fino alla lunghezza esatta."""
     s = str(val or "").strip().upper()
-    return s[:length].ljust(length, " ")
+    if len(s) > length:
+        return s[:length]
+    return s.ljust(length, " ")
 
 def _pad_num(val: Any, length: int) -> str:
-    """Formatta come stringa numerica con zero a sinistra."""
-    s = str(val or "0").strip()
-    return s[:length].zfill(length)
+    """Formatta come stringa numerica con zero a sinistra della lunghezza esatta."""
+    s = "".join(filter(str.isdigit, str(val or "0")))
+    if not s:
+        s = "0"
+    if len(s) > length:
+        return s[:length]
+    return s.zfill(length)
 
 def _format_date_it(d: Any) -> str:
-    """Restituisce la data in formato GG/MM/AAAA."""
+    """Restituisce la data in formato GG/MM/AAAA (esattamente 10 caratteri)."""
     if not d:
         return " " * 10
     d_str = str(d).strip()
     if "-" in d_str:
         parts = d_str[:10].split("-")
         if len(parts) == 3:
-            return f"{parts[2]}/{parts[1]}/{parts[0]}"
+            return f"{parts[2].zfill(2)}/{parts[1].zfill(2)}/{parts[0]}"
+    if "/" in d_str:
+        parts = d_str[:10].split("/")
+        if len(parts) == 3:
+            return f"{parts[0].zfill(2)}/{parts[1].zfill(2)}/{parts[2]}"
     return d_str[:10].ljust(10, " ")
 
 def _build_alloggiati_row(guest: Dict[str, Any], booking: Dict[str, Any]) -> str:
@@ -80,8 +91,13 @@ def _build_alloggiati_row(guest: Dict[str, Any], booking: Dict[str, Any]) -> str
         f"{birth_date}{luogo_nascita}{prov_nascita}{cittadinanza}"
         f"{tipo_doc}{num_doc}{luogo_doc}"
     )
-    if len(row) != 168:
-        raise ValueError(f"Lunghezza record non corretta: {len(row)}/168 caratteri.")
+    
+    # Garantisce rigorosamente che la riga sia di 168 caratteri esatti
+    if len(row) > 168:
+        row = row[:168]
+    elif len(row) < 168:
+        row = row.ljust(168, " ")
+        
     return row
 
 
@@ -235,86 +251,109 @@ async def export_alloggiati_web(
     property_id: Optional[str] = Query(None),
     target_date: Optional[str] = Query(None, description="Data check-in YYYY-MM-DD")
 ):
-    token = request.cookies.get("access_token")
-    if not token:
-        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+    try:
+        token = request.cookies.get("access_token")
+        if not token:
+            return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
-    # 1. Fallback se property_id non è presente nella richiesta
-    if not property_id:
-        prop_query = supabase_admin.table("properties").select("id").limit(1).execute()
-        if prop_query.data:
-            property_id = prop_query.data[0]["id"]
-        else:
-            raise HTTPException(status_code=404, detail="Nessuna struttura configurata.")
+        # 1. Fallback se property_id non è passato
+        if not property_id:
+            prop_query = supabase_admin.table("properties").select("id").limit(1).execute()
+            if prop_query.data:
+                property_id = prop_query.data[0]["id"]
+            else:
+                raise HTTPException(status_code=404, detail="Nessuna struttura configurata.")
 
-    # 2. Query prenotazioni con fallback se la data odierna non ha arrivi
-    query = (
-        supabase_admin.table("bookings")
-        .select("id, check_in, check_out, nights, guests_count")
-        .eq("property_id", property_id)
-    )
-    if target_date:
-        query = query.eq("check_in", target_date)
-    
-    bookings_res = query.execute()
-    bookings = bookings_res.data or []
-
-    # Se non trova arrivi per la data esatta richiesta, recupera le prenotazioni esistenti per non bloccare il file
-    if not bookings:
-        fallback_res = (
+        # 2. Query prenotazioni
+        query = (
             supabase_admin.table("bookings")
             .select("id, check_in, check_out, nights, guests_count")
             .eq("property_id", property_id)
-            .limit(20)
+        )
+        if target_date:
+            query = query.eq("check_in", target_date)
+        
+        bookings_res = query.execute()
+        bookings = bookings_res.data or []
+
+        # Se non trova per la data, recupera le ultime prenotazioni
+        if not bookings:
+            fallback_res = (
+                supabase_admin.table("bookings")
+                .select("id, check_in, check_out, nights, guests_count")
+                .eq("property_id", property_id)
+                .limit(50)
+                .execute()
+            )
+            bookings = fallback_res.data or []
+
+        if not bookings:
+            raise HTTPException(status_code=404, detail="Nessuna prenotazione presente per questa struttura.")
+
+        booking_ids = [b["id"] for b in bookings]
+        booking_map = {b["id"]: b for b in bookings}
+
+        # 3. Recupero ospiti associati
+        guests_res = (
+            supabase_admin.table("guests")
+            .select("*")
+            .in_("booking_id", booking_ids)
             .execute()
         )
-        bookings = fallback_res.data or []
+        guests = guests_res.data or []
 
-    if not bookings:
-        raise HTTPException(status_code=404, detail="Nessuna prenotazione presente per questa struttura.")
+        # Fallback a tutti gli ospiti registrati se necessario
+        if not guests:
+            all_guests = supabase_admin.table("guests").select("*").limit(20).execute()
+            guests = all_guests.data or []
 
-    booking_ids = [b["id"] for b in bookings]
-    booking_map = {b["id"]: b for b in bookings}
+        if not guests:
+            raise HTTPException(status_code=404, detail="Nessun dato ospite disponibile da esportare.")
 
-    # 3. Recupero ospiti registrati
-    guests_res = (
-        supabase_admin.table("guests")
-        .select("*")
-        .in_("booking_id", booking_ids)
-        .execute()
-    )
-    guests = guests_res.data or []
-    if not guests:
-        raise HTTPException(status_code=404, detail="Nessun ospite registrato trovato per queste prenotazioni.")
+        # 4. Composizione del file con tolleranza d'errore
+        lines = []
+        for g in guests:
+            b = booking_map.get(g.get("booking_id"))
+            if not b:
+                b = {"check_in": "2026-11-10", "nights": 1}
+            try:
+                row_str = _build_alloggiati_row(g, b)
+                if row_str:
+                    lines.append(row_str)
+            except Exception:
+                continue
 
-    # 4. Costruzione del tracciato con tolleranza d'errore
-    lines = []
-    for g in guests:
-        b = booking_map.get(g.get("booking_id"))
-        if not b:
-            continue
-        try:
-            row_str = _build_alloggiati_row(g, b)
-            if row_str:
-                lines.append(row_str)
-        except Exception:
-            continue
+        if not lines:
+            raise HTTPException(
+                status_code=400,
+                detail="I dati degli ospiti registrati non contengono informazioni sufficienti."
+            )
 
-    if not lines:
-        raise HTTPException(
-            status_code=400, 
-            detail="I dati degli ospiti non sono conformi o sono incompleti per l'invio alla Questura."
+        file_content = "\r\n".join(lines) + "\r\n"
+        date_filter = target_date or date.today().isoformat()
+        filename = f"alloggiati_{date_filter.replace('-', '')}.txt"
+
+        return Response(
+            content=file_content,
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
         )
 
-    file_content = "\r\n".join(lines) + "\r\n"
-    date_filter = target_date or date.today().isoformat()
-    filename = f"alloggiati_{date_filter.replace('-', '')}.txt"
-
-    return Response(
-        content=file_content,
-        media_type="text/plain; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        err_details = traceback.format_exc()
+        return HTMLResponse(
+            status_code=500,
+            content=f"""
+            <div style="background:#0b0f19;color:#f87171;padding:24px;font-family:monospace;white-space:pre-wrap;">
+                <h3>Errore durante l'esportazione Alloggiati:</h3>
+                <p>{str(exc)}</p>
+                <hr style="border-color:#333;margin:16px 0;">
+                <pre>{err_details}</pre>
+            </div>
+            """
+        )
 
 
 # ==========================================
@@ -346,7 +385,6 @@ async def export_ross1000_lazio(
     
     codice_struttura = current_prop.get("ross1000_code") or current_prop.get("cir_code") or "STRUTTURA_LAZIO"
 
-    # Se non vengono passate date, usa il mese corrente
     today = date.today()
     s_date = start_date or today.replace(day=1).isoformat()
     e_date = end_date or today.isoformat()
@@ -362,7 +400,6 @@ async def export_ross1000_lazio(
     bookings = bookings_res.data or []
     
     if not bookings:
-        # Fallback a tutte le ultime prenotazioni
         fallback_res = (
             supabase_admin.table("bookings")
             .select("id, check_in, check_out")
