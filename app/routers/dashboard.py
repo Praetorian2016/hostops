@@ -270,80 +270,45 @@ async def export_alloggiati_web(
         if not token:
             return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
-        # 1. Recupero struttura
-        if not property_id:
-            prop_query = supabase_admin.table("properties").select("id").limit(1).execute()
-            if prop_query.data:
-                property_id = prop_query.data[0]["id"]
-            else:
-                raise HTTPException(status_code=404, detail="Nessuna struttura configurata.")
-
-        # 2. Query prenotazioni (estrae solo le colonne presenti nello schema)
-        query = (
-            supabase_admin.table("bookings")
-            .select("id, check_in, check_out")
-            .eq("property_id", property_id)
-        )
-        if target_date:
-            query = query.eq("check_in", target_date)
-        
-        bookings_res = query.execute()
-        bookings = bookings_res.data or []
-
-        if not bookings:
-            fallback_res = (
-                supabase_admin.table("bookings")
-                .select("id, check_in, check_out")
-                .eq("property_id", property_id)
-                .limit(50)
-                .execute()
-            )
-            bookings = fallback_res.data or []
-
-        if not bookings:
-            raise HTTPException(status_code=404, detail="Nessuna prenotazione trovata per la struttura.")
-
-        booking_ids = [b["id"] for b in bookings]
-        booking_map = {b["id"]: b for b in bookings}
-
-        # 3. Recupero ospiti associati
-        guests_res = (
-            supabase_admin.table("guests")
-            .select("*")
-            .in_("booking_id", booking_ids)
-            .execute()
-        )
+        # 1. Recupero ospiti registrati
+        guests_res = supabase_admin.table("guests").select("*").order("created_at", desc=True).limit(50).execute()
         guests = guests_res.data or []
-
-        if not guests:
-            all_guests = supabase_admin.table("guests").select("*").limit(20).execute()
-            guests = all_guests.data or []
 
         if not guests:
             raise HTTPException(status_code=404, detail="Nessun dato ospite disponibile da esportare.")
 
-        # 4. Generazione righe Alloggiati
+        # 2. Recupero le prenotazioni collegate a questi ospiti
+        booking_ids = list({g["booking_id"] for g in guests if g.get("booking_id")})
+        booking_map = {}
+        if booking_ids:
+            b_res = supabase_admin.table("bookings").select("id, check_in, check_out").in_("id", booking_ids).execute()
+            booking_map = {b["id"]: b for b in (b_res.data or [])}
+
+        # 3. Generazione tracciato posizionale
         lines = []
         for g in guests:
-            b = booking_map.get(g.get("booking_id"))
-            if not b:
-                b = {"check_in": "2026-11-10", "check_out": "2026-11-14"}
+            # Salta eventuali record di test senza cognome
+            if not g.get("last_name") or g.get("last_name") == "TEST":
+                continue
+
+            b = booking_map.get(g.get("booking_id")) or {}
             try:
                 row_str = _build_alloggiati_row(g, b)
                 if row_str:
                     lines.append(row_str)
-            except Exception:
+            except Exception as err:
+                print(f"Salto record non conforme: {err}")
                 continue
 
         if not lines:
             raise HTTPException(
                 status_code=400,
-                detail="I dati degli ospiti non contengono informazioni sufficienti per il tracciato."
+                detail="Nessun ospite valido pronto per la generazione del file."
             )
 
         file_content = "\r\n".join(lines) + "\r\n"
-        date_filter = target_date or date.today().isoformat()
-        filename = f"alloggiati_{date_filter.replace('-', '')}.txt"
+        date_label = target_date or date.today().isoformat()
+        filename = f"alloggiati_{date_label.replace('-', '')}.txt"
 
         return Response(
             content=file_content,
@@ -359,7 +324,7 @@ async def export_alloggiati_web(
             status_code=500,
             content=f"""
             <div style="background:#0b0f19;color:#f87171;padding:24px;font-family:monospace;white-space:pre-wrap;">
-                <h3>Errore durante l'esportazione Alloggiati:</h3>
+                <h3>Errore esportazione Alloggiati:</h3>
                 <p>{str(exc)}</p>
                 <hr style="border-color:#333;margin:16px 0;">
                 <pre>{err_details}</pre>
