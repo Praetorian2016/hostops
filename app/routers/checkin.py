@@ -41,7 +41,6 @@ async def _upload_to_supabase(file: UploadFile, folder: str, booking_id: str) ->
             content,
             file_options={"content-type": file.content_type or "image/jpeg"}
         )
-        # Ottieni l'URL pubblico se il bucket è accessibile, altrimenti salva il percorso relativo
         return file_name
     except Exception:
         # Evita il blocco del check-in se il bucket storage non è ancora configurato
@@ -75,6 +74,7 @@ async def checkin_form(request: Request, booking_id: str):
     )
 
 
+@router.post("/{booking_id}", response_class=HTMLResponse)
 @router.post("/{booking_id}/submit", response_class=HTMLResponse)
 async def checkin_submit(
     booking_id: str,
@@ -111,7 +111,6 @@ async def checkin_submit(
         "alloggiati_status": "READY"
     }
 
-    # Includi i percorsi dei file se le colonne sono presenti nello schema Supabase
     if doc_path:
         guest_payload["doc_image_path"] = doc_path
     if selfie_path:
@@ -119,8 +118,7 @@ async def checkin_submit(
 
     try:
         supabase_admin.table("guests").insert(guest_payload).execute()
-    except Exception as e:
-        # Se alcune colonne opzionali (es. doc_image_path) non sono state create, riprova senza di esse
+    except Exception:
         guest_payload.pop("doc_image_path", None)
         guest_payload.pop("selfie_image_path", None)
         supabase_admin.table("guests").insert(guest_payload).execute()
