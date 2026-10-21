@@ -2,14 +2,15 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse, Response
 
 from app.models import init_db
 from app.routers import checkin, dashboard, calendar_view, receipts, auth
 from app.routers.auth import templates
 from app.services.calendar_sync import sync_external_ical_feeds
+from app.services.document_scanner import extract_guest_data_from_image
 
 # Intervallo in secondi per eventuale worker standalone
 SYNC_INTERVAL_SECONDS = 60
@@ -74,13 +75,33 @@ app.include_router(calendar_view.router)
 app.include_router(receipts.router)
 app.include_router(auth.router)
 
+# Rotte esplicite per la scansione documenti (sia con prefisso /checkin/api sia diretto /api)
+@app.post("/checkin/api/scan-document")
+@app.post("/api/scan-document")
+async def global_scan_document(file: UploadFile = File(...)):
+    try:
+        image_bytes = await file.read()
+        mime_type = file.content_type or "image/jpeg"
+        data = extract_guest_data_from_image(image_bytes, mime_type)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore scansione documento: {str(e)}")
+
+# Gestore Favicon per eliminare l'errore 404 nei log DevTools
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    favicon_path = static_dir / "favicon.ico"
+    if favicon_path.exists():
+        return FileResponse(favicon_path)
+    return Response(status_code=204)
+
 # Endpoint manuale/cron per la sincronizzazione calendari
 @app.get("/api/sync-ical")
 async def trigger_ical_sync():
     imported = await sync_external_ical_feeds()
     return {"status": "success", "imported": imported}
 
-# O "/dashboard", a seconda del tuo flusso
+# Root endpoint
 @app.get("/")
 async def root(request: Request):
     return templates.TemplateResponse(
