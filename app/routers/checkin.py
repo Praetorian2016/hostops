@@ -5,6 +5,8 @@ from typing import Optional
 from fastapi import APIRouter, Request, Form, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from fastapi import UploadFile, File, HTTPException
+from app.services.document_scanner import extract_guest_data_from_image
 
 from app.supabase_client import supabase_admin
 
@@ -149,3 +151,15 @@ async def checkin_submit(
     </body>
     </html>
     """)
+
+@router.post("/api/scan-document")
+async def scan_document(file: UploadFile = File(...)):
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Il file caricato deve essere un'immagine.")
+    
+    contents = await file.read()
+    try:
+        data = extract_guest_data_from_image(contents, file.content_type)
+        return {"status": "success", "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore scansione documento: {str(e)}")
