@@ -60,11 +60,25 @@ def _format_date_it(d: Any) -> str:
             return f"{parts[0].zfill(2)}/{parts[1].zfill(2)}/{parts[2]}"
     return d_str[:10].ljust(10, " ")
 
+def _calc_nights(check_in_str: Any, check_out_str: Any) -> int:
+    """Calcola i giorni di permanenza tra check-in e check-out."""
+    try:
+        ci = datetime.fromisoformat(str(check_in_str)[:10]).date()
+        co = datetime.fromisoformat(str(check_out_str)[:10]).date()
+        diff = (co - ci).days
+        return max(1, diff)
+    except Exception:
+        return 1
+
 def _build_alloggiati_row(guest: Dict[str, Any], booking: Dict[str, Any]) -> str:
     """Genera la riga standard posizionale da 168 caratteri per la Polizia di Stato."""
     tipo = _pad_num(guest.get("tipo_alloggiato", 16), 2)
     arr_date = _format_date_it(booking.get("check_in"))
-    stay_days = _pad_num(booking.get("nights", 1), 2)
+    
+    # Calcolo notti sicuro
+    stay_nights = booking.get("nights") or _calc_nights(booking.get("check_in"), booking.get("check_out"))
+    stay_days = _pad_num(stay_nights, 2)
+    
     cognome = _pad_str(guest.get("last_name", ""), 50)
     nome = _pad_str(guest.get("first_name", ""), 30)
     
@@ -92,7 +106,6 @@ def _build_alloggiati_row(guest: Dict[str, Any], booking: Dict[str, Any]) -> str
         f"{tipo_doc}{num_doc}{luogo_doc}"
     )
     
-    # Garantisce rigorosamente che la riga sia di 168 caratteri esatti
     if len(row) > 168:
         row = row[:168]
     elif len(row) < 168:
@@ -143,7 +156,7 @@ async def view_dashboard(request: Request):
     total_tourist_tax = 0.0
 
     for b in raw_bookings:
-        nights = b.get("nights", 1) or 1
+        nights = b.get("nights") or _calc_nights(b.get("check_in"), b.get("check_out"))
         guests_count = b.get("guests_count", 1) or 1
         
         try:
@@ -161,6 +174,7 @@ async def view_dashboard(request: Request):
         linen = float(b.get("linen_kit_cost") or 0.0)
         utilities = float(b.get("utilities_est") or 0.0)
         
+        b["nights"] = nights
         b["gross_revenue"] = gross
         b["ota_commission"] = ota
         b["cleaning_cost"] = cleaning
@@ -221,7 +235,7 @@ async def generate_tourist_tax_receipt(booking_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Prenotazione non trovata")
 
     booking = booking_res.data[0]
-    nights = booking.get("nights", 1) or 1
+    nights = booking.get("nights") or _calc_nights(booking.get("check_in"), booking.get("check_out"))
     guests_count = booking.get("guests_count", 1) or 1
 
     effective_nights = min(nights, 10)
@@ -256,7 +270,7 @@ async def export_alloggiati_web(
         if not token:
             return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
-        # 1. Fallback se property_id non è passato
+        # 1. Recupero struttura
         if not property_id:
             prop_query = supabase_admin.table("properties").select("id").limit(1).execute()
             if prop_query.data:
@@ -264,10 +278,10 @@ async def export_alloggiati_web(
             else:
                 raise HTTPException(status_code=404, detail="Nessuna struttura configurata.")
 
-        # 2. Query prenotazioni
+        # 2. Query prenotazioni (estrae solo le colonne presenti nello schema)
         query = (
             supabase_admin.table("bookings")
-            .select("id, check_in, check_out, nights, guests_count")
+            .select("id, check_in, check_out")
             .eq("property_id", property_id)
         )
         if target_date:
@@ -276,11 +290,10 @@ async def export_alloggiati_web(
         bookings_res = query.execute()
         bookings = bookings_res.data or []
 
-        # Se non trova per la data, recupera le ultime prenotazioni
         if not bookings:
             fallback_res = (
                 supabase_admin.table("bookings")
-                .select("id, check_in, check_out, nights, guests_count")
+                .select("id, check_in, check_out")
                 .eq("property_id", property_id)
                 .limit(50)
                 .execute()
@@ -288,7 +301,7 @@ async def export_alloggiati_web(
             bookings = fallback_res.data or []
 
         if not bookings:
-            raise HTTPException(status_code=404, detail="Nessuna prenotazione presente per questa struttura.")
+            raise HTTPException(status_code=404, detail="Nessuna prenotazione trovata per la struttura.")
 
         booking_ids = [b["id"] for b in bookings]
         booking_map = {b["id"]: b for b in bookings}
@@ -302,7 +315,6 @@ async def export_alloggiati_web(
         )
         guests = guests_res.data or []
 
-        # Fallback a tutti gli ospiti registrati se necessario
         if not guests:
             all_guests = supabase_admin.table("guests").select("*").limit(20).execute()
             guests = all_guests.data or []
@@ -310,12 +322,12 @@ async def export_alloggiati_web(
         if not guests:
             raise HTTPException(status_code=404, detail="Nessun dato ospite disponibile da esportare.")
 
-        # 4. Composizione del file con tolleranza d'errore
+        # 4. Generazione righe Alloggiati
         lines = []
         for g in guests:
             b = booking_map.get(g.get("booking_id"))
             if not b:
-                b = {"check_in": "2026-11-10", "nights": 1}
+                b = {"check_in": "2026-11-10", "check_out": "2026-11-14"}
             try:
                 row_str = _build_alloggiati_row(g, b)
                 if row_str:
@@ -326,7 +338,7 @@ async def export_alloggiati_web(
         if not lines:
             raise HTTPException(
                 status_code=400,
-                detail="I dati degli ospiti registrati non contengono informazioni sufficienti."
+                detail="I dati degli ospiti non contengono informazioni sufficienti per il tracciato."
             )
 
         file_content = "\r\n".join(lines) + "\r\n"
