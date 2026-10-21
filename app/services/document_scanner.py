@@ -10,11 +10,10 @@ def extract_guest_data_from_image(image_bytes: bytes, mime_type: str = "image/jp
 
     client = genai.Client(api_key=api_key)
 
-    # Modelli supportati e validi per GenerateContent nella nuova SDK
+    # Nomi esatti riconosciuti dal nuovo SDK google-genai
     models_to_try = [
         "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash-latest"
+        "gemini-2.0-flash"
     ]
 
     prompt = """
@@ -55,7 +54,7 @@ def extract_guest_data_from_image(image_bytes: bytes, mime_type: str = "image/jp
             clean_text = response.text.replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_text)
 
-            # Normalizzazione campi
+            # Normalizzazione e protezione da KeyError
             default_keys = [
                 "first_name", "last_name", "gender", "birth_date", 
                 "birth_place", "birth_place_code", "citizenship", 
@@ -69,7 +68,7 @@ def extract_guest_data_from_image(image_bytes: bytes, mime_type: str = "image/jp
 
         except Exception as e:
             last_error = e
-            print(f"[OCR] Fallito tentato con {model_name}: {e}")
+            print(f"[OCR] Errore con il modello {model_name}: {e}")
             continue
 
     raise Exception(f"Servizio OCR indisponibile su tutti i modelli: {str(last_error)}")
