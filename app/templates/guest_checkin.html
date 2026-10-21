@@ -14,6 +14,7 @@
             --primary: #3b82f6;
             --primary-hover: #2563eb;
             --success: #22c55e;
+            --warning: #f59e0b;
         }
         * {
             box-sizing: border-box;
@@ -51,6 +52,43 @@
             color: var(--text-muted);
             font-size: 0.85rem;
         }
+
+        /* Box Smart Scan OCR */
+        .smart-scan-box {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(30, 41, 59, 0.8));
+            border: 1.5px dashed var(--primary);
+            border-radius: 10px;
+            padding: 18px 14px;
+            text-align: center;
+            margin-bottom: 22px;
+        }
+        .smart-scan-btn {
+            background: var(--primary);
+            color: #ffffff;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s, transform 0.1s;
+        }
+        .smart-scan-btn:hover {
+            background: var(--primary-hover);
+        }
+        .smart-scan-btn:active {
+            transform: scale(0.98);
+        }
+        .smart-scan-status {
+            margin-top: 10px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            display: none;
+        }
+
         .form-group {
             margin-bottom: 14px;
             display: flex;
@@ -78,10 +116,17 @@
             padding: 10px 12px;
             font-size: 0.95rem;
             outline: none;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s, background-color 0.2s;
         }
         input:focus, select:focus {
             border-color: var(--primary);
+        }
+        .auto-filled {
+            animation: highlight 1.2s ease-out;
+        }
+        @keyframes highlight {
+            0% { background-color: rgba(34, 197, 94, 0.25); border-color: var(--success); }
+            100% { background-color: #0f172a; border-color: var(--border); }
         }
         .file-upload-box {
             border: 2px dashed var(--border);
@@ -125,10 +170,20 @@
 <div class="card">
     <div class="header">
         <h1>Registrazione Ospite</h1>
-        <p>Inserisci i dati obbligatori per la comunicazione alla Questura (Alloggiati Web)</p>
+        <p>Compilazione rapida tramite fotocamera o inserimento manuale</p>
     </div>
 
-    <form action="/checkin/{{ booking_id }}" method="POST" enctype="multipart/form-data">
+    <!-- Scatto OCR Rapido -->
+    <div class="smart-scan-box">
+        <input type="file" id="scan_camera_input" accept="image/*" capture="environment" style="display:none;" onchange="handleSmartScan(this)">
+        <button type="button" class="smart-scan-btn" onclick="document.getElementById('scan_camera_input').click()">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            <span>Scansiona Documento con AI</span>
+        </button>
+        <div id="smart_status" class="smart-scan-status"></div>
+    </div>
+
+    <form id="checkinForm" action="/checkin/{{ booking_id }}" method="POST" enctype="multipart/form-data">
         <div class="form-group">
             <label for="guest_type">Tipologia Ospite</label>
             <select id="guest_type" name="guest_type" required>
@@ -167,7 +222,7 @@
         <div class="row-2">
             <div class="form-group">
                 <label for="birth_place_code">Codice Luogo Nascita</label>
-                <input type="text" id="birth_place_code" name="birth_place_code" required placeholder="Es. H501 o Stato Estero">
+                <input type="text" id="birth_place_code" name="birth_place_code" required placeholder="Es. H501 o STATO ESTERO">
             </div>
             <div class="form-group">
                 <label for="citizenship_code">Codice Cittadinanza</label>
@@ -216,7 +271,81 @@
 </div>
 
 <script>
-    // Mostra il nome del file selezionato all'interno delle caselle di upload
+    async function handleSmartScan(input) {
+        if (!input.files || !input.files[0]) return;
+
+        const file = input.files[0];
+        const status = document.getElementById('smart_status');
+        status.style.display = 'block';
+        status.style.color = '#38bdf8';
+        status.textContent = 'Analisi del documento con AI in corso...';
+
+        // Sincronizza l'immagine con il campo form doc_file
+        const docFileInput = document.getElementById('doc_file');
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        docFileInput.files = dataTransfer.files;
+        document.getElementById('doc_file_label').textContent = 'Acquisito: ' + file.name;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const res = await fetch('/api/scan-document', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await res.json();
+
+            if (result.status === 'success' && result.data) {
+                const d = result.data;
+
+                const setVal = (id, val) => {
+                    if (!val) return;
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.value = val;
+                        el.classList.add('auto-filled');
+                    }
+                };
+
+                setVal('first_name', d.first_name);
+                setVal('last_name', d.last_name);
+                setVal('birth_date', d.birth_date);
+                setVal('birth_place_code', d.birth_place);
+                setVal('citizenship_code', d.citizenship);
+                setVal('doc_number', d.doc_number);
+                setVal('doc_issuer_place', d.doc_issuer);
+
+                // Mappatura sesso Questura: 1 = M, 2 = F
+                if (d.gender) {
+                    const g = d.gender.toUpperCase();
+                    document.getElementById('gender').value = (g === 'M' || g === '1') ? '1' : '2';
+                }
+
+                // Mappatura tipo documento
+                if (d.doc_type) {
+                    const dt = d.doc_type.toUpperCase();
+                    const docSelect = document.getElementById('doc_type');
+                    if (dt.includes('PASS')) docSelect.value = 'PASSP';
+                    else if (dt.includes('PAT')) docSelect.value = 'PATEN';
+                    else docSelect.value = 'IDENT';
+                }
+
+                status.style.color = '#22c55e';
+                status.textContent = 'Dati estratti con successo! Controlla e premi Conferma.';
+            } else {
+                status.style.color = '#f59e0b';
+                status.textContent = 'Lettura parziale. Completa i campi mancanti a mano.';
+            }
+        } catch (err) {
+            status.style.color = '#ef4444';
+            status.textContent = 'Errore durante la scansione. Procedi con inserimento manuale.';
+        }
+    }
+
+    // Gestori etichette upload standard
     document.getElementById('doc_file').addEventListener('change', function(e) {
         if (e.target.files.length > 0) {
             document.getElementById('doc_file_label').textContent = 'Selezionato: ' + e.target.files[0].name;
