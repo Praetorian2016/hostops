@@ -39,11 +39,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="HostOps", lifespan=lifespan)
 
-# Percorso base assoluto del progetto
-BASE_DIR = Path(__file__).resolve().parent.parent
+# Percorso base assoluto del file corrente e della root di progetto
+CURRENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = CURRENT_DIR.parent if CURRENT_DIR.name == "app" else CURRENT_DIR
 
-# Monta 'static' se la cartella esiste
-static_dir = BASE_DIR / "static"
+# Individuazione cartella 'static' (priorità su app/static dove risiedono i file PWA)
+static_dir = PROJECT_ROOT / "app" / "static"
+if not static_dir.exists():
+    static_dir = CURRENT_DIR / "static"
+if not static_dir.exists():
+    static_dir = PROJECT_ROOT / "static"
+
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
@@ -51,7 +57,7 @@ if static_dir.exists():
 if os.getenv("VERCEL"):
     uploads_dir = Path("/tmp/uploads")
 else:
-    uploads_dir = BASE_DIR / "uploads"
+    uploads_dir = PROJECT_ROOT / "uploads"
 
 try:
     uploads_dir.mkdir(parents=True, exist_ok=True)
