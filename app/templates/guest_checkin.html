@@ -291,7 +291,7 @@
         formData.append('file', file);
 
         try {
-            const res = await fetch('/api/scan-document', {
+            const res = await fetch('/checkin/api/scan-document', {
                 method: 'POST',
                 body: formData
             });
