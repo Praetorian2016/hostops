@@ -10,11 +10,8 @@ def extract_guest_data_from_image(image_bytes: bytes, mime_type: str = "image/jp
 
     client = genai.Client(api_key=api_key)
 
-    # Nomi esatti riconosciuti dal nuovo SDK google-genai
-    models_to_try = [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash"
-    ]
+    # Modello primario corrente raccomandato dalle API Google
+    model_name = "gemini-3.8-flash"
 
     prompt = """
     Analizza l'immagine di questo documento di identità (passaporto, carta d'identità o patente) 
@@ -36,39 +33,33 @@ def extract_guest_data_from_image(image_bytes: bytes, mime_type: str = "image/jp
     }
     """
 
-    last_error = None
-
-    for model_name in models_to_try:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=[
-                    types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                    prompt
-                ],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json"
-                )
+    try:
+        response = client.models.generate_content(
+            model=model_name,
+            contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                prompt
+            ],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
             )
+        )
 
-            clean_text = response.text.replace("```json", "").replace("```", "").strip()
-            data = json.loads(clean_text)
+        clean_text = response.text.replace("```json", "").replace("```", "").strip()
+        data = json.loads(clean_text)
 
-            # Normalizzazione e protezione da KeyError
-            default_keys = [
-                "first_name", "last_name", "gender", "birth_date", 
-                "birth_place", "birth_place_code", "citizenship", 
-                "citizenship_code", "doc_type", "doc_number", "doc_issuer"
-            ]
-            for key in default_keys:
-                if key not in data or data[key] is None:
-                    data[key] = ""
+        # Normalizzazione chiavi per evitare KeyError nel backend
+        default_keys = [
+            "first_name", "last_name", "gender", "birth_date", 
+            "birth_place", "birth_place_code", "citizenship", 
+            "citizenship_code", "doc_type", "doc_number", "doc_issuer"
+        ]
+        for key in default_keys:
+            if key not in data or data[key] is None:
+                data[key] = ""
 
-            return data
+        return data
 
-        except Exception as e:
-            last_error = e
-            print(f"[OCR] Errore con il modello {model_name}: {e}")
-            continue
-
-    raise Exception(f"Servizio OCR indisponibile su tutti i modelli: {str(last_error)}")
+    except Exception as e:
+        print(f"[OCR Errore Gemini]: {e}")
+        raise Exception(f"Errore durante l'elaborazione dell'immagine con {model_name}: {str(e)}")
