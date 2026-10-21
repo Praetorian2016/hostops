@@ -30,7 +30,7 @@ def extract_guest_data_from_image(image_bytes: bytes, mime_type: str = "image/jp
     """
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.8-flash",
         contents=[
             types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
             prompt
