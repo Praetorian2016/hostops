@@ -10,7 +10,7 @@ from app.supabase_client import supabase_admin
 
 router = APIRouter(prefix="/checkin", tags=["checkin"])
 
-# Risoluzione template multi-path per compatibilità locale e Vercel Serverless
+# Risoluzione template multi-path
 BASE_DIR = Path(__file__).resolve().parent.parent
 ROOT_DIR = BASE_DIR.parent
 
@@ -25,7 +25,7 @@ templates = Jinja2Templates(directory=valid_paths)
 
 
 async def _upload_to_supabase(file: UploadFile, folder: str, booking_id: str) -> Optional[str]:
-    """Effettua l'upload sicuro su Supabase Storage nel bucket 'documents'."""
+    """Upload su Supabase Storage nel bucket 'documents'."""
     if not file or not file.filename:
         return None
     try:
@@ -36,14 +36,13 @@ async def _upload_to_supabase(file: UploadFile, folder: str, booking_id: str) ->
         file_ext = Path(file.filename).suffix or ".jpg"
         file_name = f"{folder}/b_{booking_id}_{uuid.uuid4().hex[:8]}{file_ext}"
 
-        res = supabase_admin.storage.from_("documents").upload(
+        supabase_admin.storage.from_("documents").upload(
             file_name,
             content,
             file_options={"content-type": file.content_type or "image/jpeg"}
         )
         return file_name
     except Exception:
-        # Evita il blocco del check-in se il bucket storage non è ancora configurato
         return None
 
 
@@ -80,48 +79,50 @@ async def checkin_submit(
     booking_id: str,
     last_name: str = Form(...),
     first_name: str = Form(...),
-    gender: str = Form(...),
+    gender: str = Form("1"),
     birth_date: str = Form(...),
-    birth_place_code: str = Form(...),
+    birth_place_code: str = Form(""),
+    birth_province: str = Form(""),
     citizenship_code: str = Form("100000100"),
-    doc_type: str = Form("IDENT"),
-    doc_number: str = Form(...),
-    doc_issuer_place: str = Form(...),
+    document_type: str = Form(None),
+    doc_type: str = Form(None),
+    document_number: str = Form(None),
+    doc_number: str = Form(None),
+    document_issue_place_code: str = Form(None),
+    doc_issuer_place: str = Form(None),
     doc_file: UploadFile = File(None),
     selfie_file: UploadFile = File(None)
 ):
-    """Salva i dati dell'ospite e i documenti su Supabase."""
-    # 1. Carica i file su Supabase Storage (se forniti)
-    doc_path = await _upload_to_supabase(doc_file, "documents", booking_id)
-    selfie_path = await _upload_to_supabase(selfie_file, "selfies", booking_id)
+    """Salva i dati dell'ospite nella tabella guests su Supabase."""
+    # Gestione fallback per i nomi dei campi input provenienti dal form HTML
+    final_doc_type = (document_type or doc_type or "IDENT").strip()
+    final_doc_number = (document_number or doc_number or "").strip().upper()
+    final_doc_issuer = (document_issue_place_code or doc_issuer_place or "").strip().upper()
 
-    # 2. Inserimento record nella tabella guests di Supabase
+    # Upload facoltativo documenti
+    doc_url = await _upload_to_supabase(doc_file, "documents", booking_id)
+    selfie_url = await _upload_to_supabase(selfie_file, "selfies", booking_id)
+
+    # Payload strettamente conforme allo schema reale di Supabase
     guest_payload = {
         "booking_id": booking_id,
         "tipo_alloggiato": 16,
-        "last_name": last_name.strip().upper(),
         "first_name": first_name.strip().upper(),
+        "last_name": last_name.strip().upper(),
         "gender": str(gender).strip(),
-        "birth_date": birth_date.strip(),
-        "birth_place_code": birth_place_code.strip().upper(),
-        "citizenship_code": citizenship_code.strip().upper(),
-        "document_type": doc_type.strip(),
-        "document_number": doc_number.strip().upper(),
-        "document_issue_place_code": doc_issuer_place.strip().upper(),
-        "alloggiati_status": "READY"
+        "birth_date": birth_date.strip() if birth_date else None,
+        "birth_place_code": birth_place_code.strip().upper() if birth_place_code else None,
+        "birth_province": birth_province.strip()[:2].upper() if birth_province else None,
+        "citizenship_code": citizenship_code.strip().upper() if citizenship_code else "100000100",
+        "document_type": final_doc_type if final_doc_number else None,
+        "document_number": final_doc_number if final_doc_number else None,
+        "document_issue_place_code": final_doc_issuer if final_doc_issuer else None,
+        "document_front_url": doc_url,
+        "document_back_url": selfie_url
     }
 
-    if doc_path:
-        guest_payload["doc_image_path"] = doc_path
-    if selfie_path:
-        guest_payload["selfie_image_path"] = selfie_path
-
-    try:
-        supabase_admin.table("guests").insert(guest_payload).execute()
-    except Exception:
-        guest_payload.pop("doc_image_path", None)
-        guest_payload.pop("selfie_image_path", None)
-        supabase_admin.table("guests").insert(guest_payload).execute()
+    # Esecuzione insert su Supabase
+    supabase_admin.table("guests").insert(guest_payload).execute()
 
     return HTMLResponse("""
     <!DOCTYPE html>
@@ -132,39 +133,9 @@ async def checkin_submit(
       <title>Check-in Confermato - HostOps</title>
       <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
       <style>
-        body {
-          background-color: #0b0f19;
-          color: #f9fafb;
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin: 0;
-          padding: 16px;
-        }
-        .success-box {
-          background-color: #111827;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 16px;
-          padding: 36px 28px;
-          text-align: center;
-          max-width: 420px;
-          width: 100%;
-        }
-        .icon {
-          width: 56px;
-          height: 56px;
-          background: rgba(16, 185, 129, 0.12);
-          color: #10b981;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin: 0 auto 18px;
-          font-size: 26px;
-          font-weight: 800;
-        }
+        body { background-color: #0b0f19; color: #f9fafb; font-family: 'Plus Jakarta Sans', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; padding: 16px; }
+        .success-box { background-color: #111827; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 36px 28px; text-align: center; max-width: 420px; width: 100%; }
+        .icon { width: 56px; height: 56px; background: rgba(16, 185, 129, 0.12); color: #10b981; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; font-size: 26px; font-weight: 800; }
         h2 { font-size: 1.4rem; margin-bottom: 8px; color: #fff; }
         p { font-size: 0.9rem; color: #9ca3af; line-height: 1.5; }
       </style>
